@@ -68,45 +68,83 @@ router.post('/sync', async (req, res) => {
       return res.status(400).json({ success: false, message: 'companyCode, phone, date required.' });
     }
 
-    // 1. Upsert daily aggregate
-    await CallLog.findOneAndUpdate(
-      { companyCode, phone, date },
-      { $set: { incoming: incoming||0, outgoing: outgoing||0, missed: missed||0, rejected: rejected||0,
-                incomingDuration: incomingDuration||0, outgoingDuration: outgoingDuration||0,
-                totalDuration: totalDuration||0, updatedAt: new Date() } },
-      { upsert: true }
-    );
-
-    // 2. Upsert individual call entries (replace today's detail for this employee)
+    // 1. Upsert individual call entries (Append/Update instead of Replace)
     if (calls && Array.isArray(calls) && calls.length > 0) {
-      // Remove existing details for this employee today, then insert fresh
-      await CallDetail.deleteMany({ companyCode, phone, date });
-      const docs = calls.map(c => ({
-        companyCode, phone, date,
-        number:    c.number    || '',
-        name:      c.name      || '',
-        callType:  c.callType  || 'unknown',
-        duration:  c.duration  || 0,
-        timestamp: new Date(c.timestamp),
+      const ops = calls.map(c => ({
+        updateOne: {
+          filter: { 
+            companyCode, 
+            phone, 
+            timestamp: new Date(c.timestamp), 
+            number: c.number 
+          },
+          update: { 
+            $set: {
+              companyCode, phone, date,
+              number:    c.number    || '',
+              name:      c.name      || '',
+              callType:  c.callType.toLowerCase(),
+              duration:  c.duration  || 0,
+              timestamp: new Date(c.timestamp),
+            }
+          },
+          upsert: true
+        }
       }));
-      await CallDetail.insertMany(docs);
+      
+      await CallDetail.bulkWrite(ops);
 
-      // Update lastCallTime on employee record
-      const lastCall = calls.reduce((latest, c) =>
-        c.timestamp > latest ? c.timestamp : latest, calls[0]?.timestamp || 0);
+      // 2. Recalculate daily aggregate from individual DETAIL records for total accuracy
+      const allCallsToday = await CallDetail.find({ companyCode, phone, date });
+      let inc = 0, out = 0, mis = 0, rej = 0;
+      let incDur = 0, outDur = 0, totDur = 0;
+
+      for (const c of allCallsToday) {
+        const type = c.callType.toLowerCase();
+        const dur = c.duration || 0;
+        totDur += dur;
+
+        if (type === 'incoming') { inc++; incDur += dur; }
+        else if (type === 'outgoing') { out++; outDur += dur; }
+        else if (type === 'missed') { mis++; }
+        else if (type === 'rejected') { rej++; }
+      }
+
+      // 3. Update the daily aggregate log
+      await CallLog.findOneAndUpdate(
+        { companyCode, phone, date },
+        { $set: { 
+            incoming: inc, outgoing: out, missed: mis, rejected: rej,
+            incomingDuration: incDur, outgoingDuration: outDur,
+            totalDuration: totDur, 
+            updatedAt: new Date() 
+          } 
+        },
+        { upsert: true }
+      );
+
+      // 4. Update lastCallTime on employee record
+      const lastCallObj = allCallsToday.reduce((latest, c) =>
+        c.timestamp > latest ? c : latest, allCallsToday[0]);
 
       await Employee.findOneAndUpdate(
         { companyCode, mobile: phone },
         { $set: {
             deviceModel:  deviceModel  || '',
             appVersion:   appVersion   || '',
-            lastCallTime: new Date(lastCall),
+            lastCallTime: lastCallObj ? lastCallObj.timestamp : new Date(),
             lastSyncTime: new Date(),
           }
         }
       );
     } else {
-      // Still update sync time even with no calls
+      // No new calls, but still update the daily record existence and sync time
+      await CallLog.findOneAndUpdate(
+        { companyCode, phone, date },
+        { $setOnInsert: { incoming:0, outgoing:0, missed:0, rejected:0, totalDuration:0 },
+          $set: { updatedAt: new Date() } },
+        { upsert: true }
+      );
       await Employee.findOneAndUpdate(
         { companyCode, mobile: phone },
         { $set: { deviceModel: deviceModel||'', appVersion: appVersion||'', lastSyncTime: new Date() } }

@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
-const { notifyAdminOfRequest } = require('../services/mailService');
+const { notifyAdminOfRequest, notifyAdminOfRmRequest } = require('../services/mailService');
 
 const router = express.Router();
 
@@ -269,6 +269,89 @@ router.put('/company/:companyCode/password', async (req, res) => {
     return res.status(200).json({ success: true, message: 'Password updated successfully.' });
   } catch (err) {
     console.error('[update password]', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
+/* ─────────────────────────────────────────────
+   POST /api/auth/company/:companyCode/request-rm
+───────────────────────────────────────────── */
+router.post('/company/:companyCode/request-rm', async (req, res) => {
+  try {
+    const { companyCode } = req.params;
+    const user = await User.findOne({ companyCode });
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+
+    // 8 hour throttle check
+    if (user.rmRequestTime) {
+      const hoursSinceRequest = (Date.now() - new Date(user.rmRequestTime).getTime()) / (1000 * 60 * 60);
+      if (hoursSinceRequest < 8) {
+        return res.status(429).json({ success: false, message: `Admin will assign u an Relationship Manager as soon, so check after few minitue. Please wait ${Math.ceil(8 - hoursSinceRequest)} hours to request again.` });
+      }
+    }
+
+    user.rmRequestTime = new Date();
+    await user.save();
+
+    // Async notify admin
+    notifyAdminOfRmRequest(user).catch(e => console.error('[rm request mail error]:', e));
+
+    return res.status(200).json({ success: true, message: 'Admin will assign u an Relationship Manager as soon, so check after few minitue', rmRequestTime: user.rmRequestTime });
+  } catch (err) {
+    console.error('[request rm]', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
+/* ─────────────────────────────────────────────
+   PUT /api/auth/company/:companyCode/tags
+───────────────────────────────────────────── */
+router.put('/company/:companyCode/tags', async (req, res) => {
+  try {
+    const { companyCode } = req.params;
+    const { tags } = req.body;
+
+    if (!Array.isArray(tags)) {
+      return res.status(400).json({ success: false, message: 'Tags must be an array.' });
+    }
+
+    const user = await User.findOneAndUpdate(
+      { companyCode },
+      { tags: tags.map(t => t.trim()).filter(t => t !== '') },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Company not found.' });
+    }
+
+    return res.status(200).json({ success: true, message: 'Tags updated.', tags: user.tags });
+  } catch (err) {
+    console.error('[update tags]', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
+/* ─────────────────────────────────────────────
+   PUT /api/auth/company/:companyCode/assign-rm (ADMIN ONLY MOCK)
+───────────────────────────────────────────── */
+router.put('/company/:companyCode/assign-rm', async (req, res) => {
+  try {
+    const { companyCode } = req.params;
+    const { name, phone, email, workingDays, workingHours } = req.body;
+    
+    const user = await User.findOneAndUpdate(
+      { companyCode },
+      { 
+        relationshipManager: { name, phone, email, workingDays, workingHours }
+      },
+      { new: true }
+    );
+    if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
+    
+    return res.status(200).json({ success: true, message: 'RM assigned!', company: user });
+  } catch (err) {
+    console.error('[assign rm]', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
   }
 });

@@ -75,9 +75,29 @@ const notifyCompanyOfRejection = (email, name) => {
   });
 };
 
+const notifyAdminOfRmRequest = (company) => {
+  return sendEmail({
+    to: ADMIN_EMAIL,
+    subject: `Relationship Manager Requested - ${company.companyName}`,
+    html: `
+      <h2>New RM Request</h2>
+      <p>A company is requesting a Relationship Manager:</p>
+      <ul>
+        <li><strong>Company Name:</strong> ${company.companyName}</li>
+        <li><strong>Company Code:</strong> ${company.companyCode}</li>
+        <li><strong>Admin Name:</strong> ${company.name}</li>
+        <li><strong>Admin Email:</strong> ${company.email}</li>
+        <li><strong>Request Time:</strong> ${new Date().toLocaleString()}</li>
+      </ul>
+      <p>Please assign an RM from the Admin Dashboard.</p>
+    `,
+  });
+};
+
 module.exports = {
   sendEmail,
   notifyAdminOfRequest,
   notifyCompanyOfApproval,
   notifyCompanyOfRejection,
+  notifyAdminOfRmRequest,
 };

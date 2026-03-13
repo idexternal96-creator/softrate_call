@@ -83,7 +83,17 @@ const userSchema = new mongoose.Schema(
     tags: [{
       type: String,
       trim: true
-    }]
+    }],
+    relationshipManager: {
+      name: { type: String, trim: true },
+      phone: { type: String, trim: true },
+      email: { type: String, trim: true },
+      workingDays: { type: String, trim: true },
+      workingHours: { type: String, trim: true }
+    },
+    rmRequestTime: {
+      type: Date
+    }
   },
   {
     timestamps: true, // adds createdAt & updatedAt automatically

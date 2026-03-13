@@ -87,6 +87,32 @@ router.patch('/:id/tags', async (req, res) => {
   }
 });
 
+// PUT update employee details
+router.put('/:id', async (req, res) => {
+  try {
+    const { name, mobile, tags } = req.body;
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (mobile) updateData.mobile = mobile;
+    if (tags && Array.isArray(tags)) updateData.tags = tags;
+
+    const employee = await Employee.findByIdAndUpdate(
+      req.params.id,
+      { $set: updateData },
+      { new: true }
+    );
+
+    if (!employee) {
+      return res.status(404).json({ success: false, message: 'Employee not found.' });
+    }
+
+    return res.status(200).json({ success: true, employee, message: 'Employee updated successfully.' });
+  } catch (err) {
+    console.error('[update employee]', err);
+    return res.status(500).json({ success: false, message: 'Server error updating employee.' });
+  }
+});
+
 // Employee Login (via mobile + companyCode)
 router.post('/login', async (req, res) => {
   try {

@@ -13,5 +13,7 @@ const callDetailSchema = new mongoose.Schema({
 
 callDetailSchema.index({ companyCode: 1, phone: 1, date: 1 });
 callDetailSchema.index({ companyCode: 1, phone: 1, timestamp: -1 });
+// Unique index to prevent duplicate sync entries
+callDetailSchema.index({ companyCode: 1, phone: 1, timestamp: 1, number: 1 }, { unique: true });
 
 module.exports = mongoose.model('CallDetail', callDetailSchema);

@@ -138,4 +138,29 @@ router.patch('/reject/:id', protectAdmin, async (req, res) => {
   }
 });
 
+// Assign RM
+router.post('/assign-rm/:companyCode', protectAdmin, async (req, res) => {
+  try {
+    const { companyCode } = req.params;
+    const rmData = req.body;
+    
+    // Validate inputs
+    if (!rmData.name || !rmData.phone || !rmData.email) {
+      return res.status(400).json({ success: false, message: 'Missing required RM details' });
+    }
+
+    const company = await User.findOneAndUpdate(
+      { companyCode },
+      { relationshipManager: rmData },
+      { new: true }
+    );
+    if (!company) return res.status(404).json({ success: false, message: 'Company not found' });
+    
+    res.json({ success: true, message: 'RM Assigned', company });
+  } catch (err) {
+    console.error('[assign rm]:', err);
+    res.status(500).json({ success: false, message: 'Server error: ' + err.message });
+  }
+});
+
 module.exports = router;
