@@ -1,24 +1,73 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Admin = require('../models/Admin');
 const { notifyCompanyOfApproval, notifyCompanyOfRejection } = require('../services/mailService');
 
 const router = express.Router();
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@softrate.com';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Softrate@123';
 const JWT_SECRET = process.env.JWT_SECRET || 'your_admin_jwt_secret';
 
-// Admin Login
+// Admin Login (JSON API)
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   
-  if (email === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
-    const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '1d' });
-    return res.json({ success: true, token });
+  try {
+    const admin = await Admin.findOne({ email });
+    if (admin && admin.password === password) {
+      const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '1d' });
+      return res.json({ success: true, token });
+    }
+    return res.status(401).json({ success: false, message: 'Invalid admin credentials' });
+  } catch (err) {
+    console.error('[admin login]:', err);
+    return res.status(500).json({ success: false, message: 'Server error: ' + err.message });
   }
+});
+
+// Admin Login (HTML Form POST)
+router.post('/login-form', async (req, res) => {
+  const { email, password } = req.body;
   
-  return res.status(401).json({ success: false, message: 'Invalid admin credentials' });
+  // We need the frontend URL to redirect back to. In production this would be standard, 
+  // but for local testing assuming standard file:// or localhost server for frontend.
+  // Instead of redirecting to a file:// which browsers block, we'll try to redirect
+  // to an absolute URL if possible. Since we don't know the exact host of the admin-page, 
+  // we could return an HTML page that sets the localStorage and then redirects.
+  try {
+    const admin = await Admin.findOne({ email });
+    if (admin && admin.password === password) {
+      const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '1d' });
+      
+      // Return a snippet of HTML that sets localStorage and redirects to dashboard.html
+      // We do this because the admin-page is just static files and may not be served by
+      // this express backend on the same port.
+      return res.send(`
+        <html>
+          <body>
+            <script>
+              localStorage.setItem('adminToken', '${token}');
+              window.location.href = document.referrer.replace('index.html', '') + 'dashboard.html';
+            </script>
+          </body>
+        </html>
+      `);
+    }
+    
+    // Redirect back to login with error
+    return res.send(`
+      <html>
+        <body>
+          <script>
+            window.location.href = document.referrer.split('?')[0] + '?error=Invalid%20admin%20credentials';
+          </script>
+        </body>
+      </html>
+    `);
+  } catch (err) {
+    console.error('[admin form login]:', err);
+    return res.status(500).send(`Server error: ${err.message}`);
+  }
 });
 
 // Middleware to protect admin routes
