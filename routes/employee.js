@@ -20,11 +20,11 @@ router.get('/', async (req, res) => {
 // POST a new employee
 router.post('/', async (req, res) => {
   try {
-    const { name, mobile, companyCode } = req.body;
+    const { name, mobile, companyCode, countryCode } = req.body;
     if (!name || !mobile || !companyCode) {
       return res.status(400).json({ success: false, message: 'Name, mobile, and companyCode are required.' });
     }
-    const newEmployee = await Employee.create({ name, mobile, companyCode });
+    const newEmployee = await Employee.create({ name, mobile, companyCode, countryCode: countryCode || '+91' });
     return res.status(201).json({ success: true, employee: newEmployee, message: 'Employee added successfully.' });
   } catch (err) {
     console.error('[post employee]', err);
@@ -90,10 +90,11 @@ router.patch('/:id/tags', async (req, res) => {
 // PUT update employee details
 router.put('/:id', async (req, res) => {
   try {
-    const { name, mobile, tags } = req.body;
+    const { name, mobile, countryCode, tags } = req.body;
     const updateData = {};
     if (name) updateData.name = name;
     if (mobile) updateData.mobile = mobile;
+    if (countryCode) updateData.countryCode = countryCode;
     if (tags && Array.isArray(tags)) updateData.tags = tags;
 
     const employee = await Employee.findByIdAndUpdate(
@@ -116,11 +117,13 @@ router.put('/:id', async (req, res) => {
 // Employee Login (via mobile + companyCode)
 router.post('/login', async (req, res) => {
   try {
-    const { companyCode, mobile } = req.body;
+    const { companyCode, mobile, countryCode } = req.body;
     if (!companyCode || !mobile) {
       return res.status(400).json({ success: false, message: 'Company code and mobile number are required.' });
     }
-    const employee = await Employee.findOne({ companyCode, mobile });
+    const query = { companyCode, mobile };
+    if (countryCode) query.countryCode = countryCode;
+    const employee = await Employee.findOne(query);
     if (!employee) {
       return res.status(404).json({ success: false, message: 'Employee not found with this number & company code.' });
     }

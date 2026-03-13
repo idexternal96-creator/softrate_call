@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 
 const employeeSchema = new mongoose.Schema({
   name:         { type: String, required: true, trim: true },
+  countryCode:  { type: String, default: '+91', trim: true },
   mobile:       { type: String, required: true, trim: true },
   companyCode:  { type: String, required: true, index: true },
   employeeCode: { type: String, default: '' },  // Optional — set by employee in app

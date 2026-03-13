@@ -60,7 +60,6 @@ const userSchema = new mongoose.Schema(
     },
     teamSize: {
       type: String,
-      enum: TEAM_SIZE_OPTIONS,
       required: [true, 'Team size is required'],
     },
     industry: {
@@ -101,5 +100,5 @@ const userSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model('User', userSchema);
-module.exports.TEAM_SIZE_OPTIONS = TEAM_SIZE_OPTIONS;
+module.exports.INDUSTRY_OPTIONS = INDUSTRY_OPTIONS;
 module.exports.INDUSTRY_OPTIONS = INDUSTRY_OPTIONS;

@@ -176,7 +176,8 @@ router.post('/login', async (req, res) => {
         companyCode: user.companyCode,
         companyAddress: user.companyAddress || '',
         status: user.status,
-        isApproved: user.isApproved
+        isApproved: user.isApproved,
+        teamSize: user.teamSize
       },
     });
   } catch (err) {
@@ -328,6 +329,35 @@ router.put('/company/:companyCode/tags', async (req, res) => {
     return res.status(200).json({ success: true, message: 'Tags updated.', tags: user.tags });
   } catch (err) {
     console.error('[update tags]', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
+/* ─────────────────────────────────────────────
+   PUT /api/auth/company/:companyCode/team-size
+───────────────────────────────────────────── */
+router.put('/company/:companyCode/team-size', async (req, res) => {
+  try {
+    const { companyCode } = req.params;
+    const { teamSize } = req.body;
+
+    if (!teamSize) {
+      return res.status(400).json({ success: false, message: 'Team size is required.' });
+    }
+
+    const user = await User.findOneAndUpdate(
+      { companyCode },
+      { teamSize: teamSize.toString() },
+      { new: true }
+    );
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Company not found.' });
+    }
+
+    return res.status(200).json({ success: true, message: 'Team size updated.', teamSize: user.teamSize });
+  } catch (err) {
+    console.error('[update team-size]', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
   }
 });
