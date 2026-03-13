@@ -142,9 +142,58 @@ router.get('/summary', async (req, res) => {
 // ── GET /api/calllogs/employees ───────────────────────────────
 router.get('/employees', async (req, res) => {
   try {
-    const { companyCode } = req.query;
+    const { companyCode, callType, duration, callTime } = req.query;
     if (!companyCode) return res.status(400).json({ success: false, message: 'companyCode required' });
     const [from, to] = resolveRange(req.query);
+
+    // If advanced filters are present, we MUST aggregate from individual CallDetail records
+    if (callType || duration || callTime) {
+      const query = { companyCode, date: { $gte: from, $lte: to } };
+      
+      // 1. Filter by callType if specified
+      if (callType && callType !== 'Select') query.callType = callType.toLowerCase();
+
+      let calls = await CallDetail.find(query);
+
+      // 2. Filter by duration on the items found
+      if (duration && duration !== 'Select') {
+        calls = calls.filter(c => {
+          if (duration === '< 1 min') return c.duration < 60;
+          if (duration === '1-5 min') return c.duration >= 60 && c.duration <= 300;
+          if (duration === '> 5 min') return c.duration > 300;
+          return true;
+        });
+      }
+
+      // 3. Filter by callTime (Time of Day)
+      if (callTime && callTime !== 'Select') {
+        calls = calls.filter(c => {
+          const hour = new Date(c.timestamp).getHours();
+          if (callTime === 'Morning') return hour >= 6 && hour < 12;
+          if (callTime === 'Afternoon') return hour >= 12 && hour < 17;
+          if (callTime === 'Evening') return hour >= 17 && hour < 21;
+          if (callTime === 'Night') return (hour >= 21 && hour <= 23) || (hour >= 0 && hour < 6);
+          return true;
+        });
+      }
+
+      // Aggregate filtered calls by employee
+      const map = {};
+      for (const c of calls) {
+        if (!map[c.phone]) map[c.phone] = { phone: c.phone, incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0 };
+        const e = map[c.phone];
+        const type = c.callType.toLowerCase();
+        if (type === 'incoming') { e.incoming++; e.incomingDuration += c.duration; }
+        else if (type === 'outgoing') { e.outgoing++; e.outgoingDuration += c.duration; }
+        else if (type === 'missed') { e.missed++; }
+        else if (type === 'rejected') { e.rejected++; }
+        e.totalDuration += c.duration;
+      }
+      const employees = Object.values(map).map(e => ({ ...e, total: e.incoming+e.outgoing+e.missed+e.rejected }));
+      return res.status(200).json({ success: true, employees });
+    }
+
+    // Default: Use pre-aggregated CallLog for speed
     const docs = await CallLog.find({ companyCode, date: { $gte: from, $lte: to } });
     const map = {};
     for (const d of docs) {
@@ -156,6 +205,7 @@ router.get('/employees', async (req, res) => {
     const employees = Object.values(map).map(e => ({ ...e, total: e.incoming+e.outgoing+e.missed+e.rejected }));
     return res.status(200).json({ success: true, employees });
   } catch (err) {
+    console.error('[employees report]', err);
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 });

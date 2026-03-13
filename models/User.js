@@ -80,6 +80,10 @@ const userSchema = new mongoose.Schema(
     trialStartDate: {
       type: Date,
     },
+    tags: [{
+      type: String,
+      trim: true
+    }]
   },
   {
     timestamps: true, // adds createdAt & updatedAt automatically
