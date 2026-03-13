@@ -54,6 +54,39 @@ router.patch('/:id/code', async (req, res) => {
   }
 });
 
+// PATCH employee tags (update employee and add tag to company)
+router.patch('/:id/tags', async (req, res) => {
+  try {
+    const { tags, companyCode } = req.body;
+    if (!tags || !Array.isArray(tags)) {
+      return res.status(400).json({ success: false, message: 'Tags array is required.' });
+    }
+
+    const employee = await Employee.findByIdAndUpdate(
+      req.params.id,
+      { $set: { tags: tags } },
+      { new: true }
+    );
+    if (!employee) {
+      return res.status(404).json({ success: false, message: 'Employee not found.' });
+    }
+
+    // Add new tags to the company profile uniquely
+    if (companyCode) {
+      const User = require('../models/User');
+      await User.findOneAndUpdate(
+        { companyCode },
+        { $addToSet: { tags: { $each: tags } } }
+      );
+    }
+
+    return res.status(200).json({ success: true, employee });
+  } catch (err) {
+    console.error('[patch employee tags]', err);
+    return res.status(500).json({ success: false, message: 'Server error updating employee tags.' });
+  }
+});
+
 // Employee Login (via mobile + companyCode)
 router.post('/login', async (req, res) => {
   try {
