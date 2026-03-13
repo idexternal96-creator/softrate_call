@@ -21,10 +21,10 @@ function dateRange(label) {
     return [toDateStr(y), toDateStr(y)];
   }
   if (label === 'lastweek') {
-    const day = today.getDay() || 7;
-    const mon = new Date(today); mon.setDate(today.getDate() - day - 6);
-    const sun = new Date(mon);   sun.setDate(mon.getDate() + 6);
-    return [toDateStr(mon), toDateStr(sun)];
+    // Return a rolling 7-day window (today - 6 days to today)
+    const start = new Date(today); 
+    start.setDate(today.getDate() - 6);
+    return [toDateStr(start), toDateStr(today)];
   }
   return [toDateStr(today), toDateStr(today)];
 }
