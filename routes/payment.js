@@ -48,18 +48,29 @@ function generateCompanyCode(name) {
 ───────────────────────────────────────────── */
 router.get('/calculate', async (req, res) => {
   try {
-    const { teamSize, toDate } = req.query;
+    const { teamSize, toDate, companyCode } = req.query;
     if (!teamSize || !toDate) {
       return res.status(400).json({ success: false, message: 'teamSize and toDate are required.' });
     }
 
-    const fromDate = new Date();
+    const now = new Date();
+    let fromDate = new Date();
+    
+    // If companyCode provided, this is a renewal preview
+    if (companyCode) {
+      const user = await User.findOne({ companyCode: companyCode.toUpperCase() });
+      if (user && user.subscriptionTo && new Date(user.subscriptionTo) > now) {
+        fromDate = new Date(user.subscriptionTo);
+        fromDate.setDate(fromDate.getDate() + 1);
+      }
+    }
+    
     fromDate.setHours(0, 0, 0, 0);
     const to = new Date(toDate);
     to.setHours(23, 59, 59, 999);
 
     if (to <= fromDate) {
-      return res.status(400).json({ success: false, message: 'To date must be in the future.' });
+      return res.status(400).json({ success: false, message: 'Select a date after the current subscription ends.' });
     }
 
     const days = Math.ceil((to - fromDate) / (1000 * 60 * 60 * 24));
@@ -277,54 +288,6 @@ router.post('/verify', async (req, res) => {
 });
 
 /* ─────────────────────────────────────────────
-   POST /api/payment/order  (for logged-in renewals)
-───────────────────────────────────────────── */
-router.post('/order', async (req, res) => {
-  try {
-    const { companyCode, toDate } = req.body;
-    if (!companyCode || !toDate) {
-      return res.status(400).json({ success: false, message: 'companyCode and toDate are required.' });
-    }
-
-    const user = await User.findOne({ companyCode });
-    if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
-
-    const fromDate = new Date();
-    fromDate.setHours(0, 0, 0, 0);
-    const to = new Date(toDate);
-    to.setHours(23, 59, 59, 999);
-
-    if (to <= fromDate) return res.status(400).json({ success: false, message: 'To date must be in the future.' });
-
-    const days = Math.ceil((to - fromDate) / (1000 * 60 * 60 * 24));
-    const teamSizeMax = getTeamSizeMax(user.teamSize);
-    const amountPaise = teamSizeMax * PRICE_PER_PERSON_PER_DAY * days * 100;
-
-    const razorpay = getRazorpay();
-    const order = await razorpay.orders.create({
-      amount: amountPaise, currency: 'INR',
-      receipt: `rcpt_${companyCode}_${Date.now()}`,
-      notes: { companyCode, fromDate: fromDate.toISOString(), toDate: to.toISOString() },
-    });
-
-    await Payment.create({
-      companyCode, userId: user._id, razorpayOrderId: order.id,
-      amount: amountPaise, fromDate, toDate: to,
-      teamSize: user.teamSize, teamSizeMax, pricePerPersonPerDay: PRICE_PER_PERSON_PER_DAY, days, status: 'created',
-    });
-
-    return res.json({
-      success: true, orderId: order.id, amount: amountPaise, amountRupees: amountPaise / 100, currency: 'INR',
-      days, teamSizeMax, fromDate, toDate: to, keyId: process.env.RAZORPAY_KEY_ID,
-      companyName: user.companyName, email: user.email, mobile: user.mobile,
-    });
-  } catch (err) {
-    console.error('[payment/order]', err);
-    return res.status(500).json({ success: false, message: 'Failed to create payment order. ' + (err.message || '') });
-  }
-});
-
-/* ─────────────────────────────────────────────
    POST /api/payment/verify-renewal (for logged-in renewals)
 ───────────────────────────────────────────── */
 router.post('/verify-renewal', async (req, res) => {
@@ -390,12 +353,18 @@ router.post('/renew', async (req, res) => {
     if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
 
     const now = new Date();
-    const fromDate = (user.subscriptionTo && user.subscriptionTo > now) ? new Date(user.subscriptionTo) : now;
+    let fromDate = new Date();
+    // If subscription is still active, start from the day AFTER it expires
+    if (user.subscriptionTo && user.subscriptionTo > now) {
+      fromDate = new Date(user.subscriptionTo);
+      fromDate.setDate(fromDate.getDate() + 1);
+    }
     fromDate.setHours(0, 0, 0, 0);
+    
     const to = new Date(toDate);
     to.setHours(23, 59, 59, 999);
 
-    if (to <= fromDate) return res.status(400).json({ success: false, message: 'To date must be after current subscription end.' });
+    if (to <= fromDate) return res.status(400).json({ success: false, message: 'Select a date after the current subscription ends.' });
 
     const days = Math.ceil((to - fromDate) / (1000 * 60 * 60 * 24));
     const teamSizeMax = getTeamSizeMax(user.teamSize);
@@ -430,9 +399,32 @@ router.post('/renew', async (req, res) => {
 ───────────────────────────────────────────── */
 router.get('/history/:companyCode', async (req, res) => {
   try {
-    const payments = await Payment.find({ companyCode: req.params.companyCode }).sort({ createdAt: -1 });
+    const companyCode = req.params.companyCode.toUpperCase();
+    const payments = await Payment.find({ companyCode }).sort({ createdAt: -1 });
     return res.json({ success: true, payments });
   } catch (err) {
+    console.error('[payment/history]', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
+/* ─────────────────────────────────────────────
+   DELETE /api/payment/order/:id
+───────────────────────────────────────────── */
+router.delete('/order/:id', async (req, res) => {
+  try {
+    const payment = await Payment.findById(req.params.id);
+    if (!payment) return res.status(404).json({ success: false, message: 'Payment record not found.' });
+
+    // Only allow deleting unpaid orders
+    if (payment.status !== 'created') {
+      return res.status(400).json({ success: false, message: 'Only unpaid orders can be deleted.' });
+    }
+
+    await Payment.findByIdAndDelete(req.params.id);
+    return res.json({ success: true, message: 'Order deleted successfully.' });
+  } catch (err) {
+    console.error('[payment/delete-order]', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
   }
 });

@@ -2,6 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Admin = require('../models/Admin');
+const Payment = require('../models/Payment');
 const { notifyCompanyOfApproval, notifyCompanyOfRejection } = require('../services/mailService');
 
 const router = express.Router();
@@ -159,6 +160,22 @@ router.post('/assign-rm/:companyCode', protectAdmin, async (req, res) => {
     res.json({ success: true, message: 'RM Assigned', company });
   } catch (err) {
     console.error('[assign rm]:', err);
+    res.status(500).json({ success: false, message: 'Server error: ' + err.message });
+  }
+});
+
+// Get company payment history
+router.get('/payments/:companyCode', protectAdmin, async (req, res) => {
+  try {
+    const { companyCode } = req.params;
+    // Case-insensitive regex match for companyCode to avoid mismatches
+    const payments = await Payment.find({ 
+      companyCode: new RegExp('^' + companyCode + '$', 'i')
+    }).sort({ createdAt: -1 });
+    
+    res.json({ success: true, payments });
+  } catch (err) {
+    console.error('[admin payments]:', err);
     res.status(500).json({ success: false, message: 'Server error: ' + err.message });
   }
 });
