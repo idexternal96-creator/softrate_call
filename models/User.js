@@ -92,7 +92,13 @@ const userSchema = new mongoose.Schema(
     },
     rmRequestTime: {
       type: Date
-    }
+    },
+    subscriptionFrom: {
+      type: Date,
+    },
+    subscriptionTo: {
+      type: Date,
+    },
   },
   {
     timestamps: true, // adds createdAt & updatedAt automatically

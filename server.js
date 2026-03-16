@@ -40,16 +40,27 @@ const User = require('./models/User');
 
 // Expiration Cron Job (Runs every midnight)
 cron.schedule('0 0 * * *', async () => {
-  console.log('⏳ Running trial expiration check...');
+  console.log('⏳ Running trial/subscription expiration check...');
   try {
-    const expiredUsers = await User.updateMany(
+    // Expire Free-Trial users after 7 days
+    const expiredTrials = await User.updateMany(
       {
         status: 'Free-Trial',
         trialStartDate: { $lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
       },
       { $set: { status: 'On due' } }
     );
-    console.log(`✅ Updated ${expiredUsers.modifiedCount} users to 'On due' status.`);
+    console.log(`✅ Updated ${expiredTrials.modifiedCount} trial users to 'On due'.`);
+
+    // Expire Paid users whose subscriptionTo has passed
+    const expiredPaid = await User.updateMany(
+      {
+        status: 'Paid',
+        subscriptionTo: { $lt: new Date() }
+      },
+      { $set: { status: 'On due' } }
+    );
+    console.log(`✅ Updated ${expiredPaid.modifiedCount} paid users to 'On due' (subscription expired).`);
   } catch (err) {
     console.error('❌ Error in expiration cron job:', err);
   }
@@ -63,6 +74,9 @@ app.use('/api/employees', require('./routes/employee'));
 
 // Bookmark routes
 app.use('/api/bookmarks', require('./routes/bookmark'));
+
+// Payment routes
+app.use('/api/payment', require('./routes/payment'));
 
 // CallLog routes
 app.use('/api/calllogs', require('./routes/calllog'));

@@ -3,6 +3,7 @@ const router   = express.Router();
 const CallLog  = require('../models/CallLog');
 const CallDetail = require('../models/CallDetail');
 const Employee = require('../models/Employee');
+const User     = require('../models/User');
 
 // Format date as YYYY-MM-DD using LOCAL time (matches what Flutter sends)
 function toDateStr(d) {
@@ -67,6 +68,22 @@ router.post('/sync', async (req, res) => {
     if (!companyCode || !phone || !date) {
       return res.status(400).json({ success: false, message: 'companyCode, phone, date required.' });
     }
+
+    // ── Subscription guard ──────────────────────────────────────
+    const company = await User.findOne({ companyCode });
+    if (company) {
+      const now = new Date();
+      const isExpired = company.status === 'On due' ||
+        (company.subscriptionTo && new Date(company.subscriptionTo) < now);
+      if (isExpired) {
+        return res.status(403).json({
+          success: false,
+          message: 'Subscription expired. Please renew your plan to continue syncing call records.',
+          code: 'SUBSCRIPTION_EXPIRED',
+        });
+      }
+    }
+    // ────────────────────────────────────────────────────────────
 
     // 1. Upsert individual call entries (Append/Update instead of Replace)
     if (calls && Array.isArray(calls) && calls.length > 0) {
