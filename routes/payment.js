@@ -320,14 +320,14 @@ router.post('/verify-renewal', async (req, res) => {
     const payment = await Payment.findOneAndUpdate(
       { razorpayOrderId: razorpay_order_id },
       { razorpayPaymentId: razorpay_payment_id, razorpaySignature: razorpay_signature, paymentMethod: method, bank, bankTransactionId: bankTxnId, cardNetwork, cardLast4, walletName, vpa, status: 'paid' },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!payment) return res.status(404).json({ success: false, message: 'Payment record not found.' });
 
     const user = await User.findOneAndUpdate(
       { companyCode },
       { status: 'Paid', isApproved: true, subscriptionFrom: payment.fromDate, subscriptionTo: payment.toDate },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     return res.json({

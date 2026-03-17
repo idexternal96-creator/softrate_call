@@ -218,7 +218,7 @@ router.put('/company/:companyCode/address', async (req, res) => {
     const user = await User.findOneAndUpdate(
       { companyCode },
       { companyAddress: companyAddress.trim() },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!user) {
@@ -319,7 +319,7 @@ router.put('/company/:companyCode/tags', async (req, res) => {
     const user = await User.findOneAndUpdate(
       { companyCode },
       { tags: tags.map(t => t.trim()).filter(t => t !== '') },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!user) {
@@ -348,7 +348,7 @@ router.put('/company/:companyCode/team-size', async (req, res) => {
     const user = await User.findOneAndUpdate(
       { companyCode },
       { teamSize: teamSize.toString() },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!user) {
@@ -375,7 +375,7 @@ router.put('/company/:companyCode/assign-rm', async (req, res) => {
       { 
         relationshipManager: { name, phone, email, workingDays, workingHours }
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
     

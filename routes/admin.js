@@ -153,7 +153,7 @@ router.post('/assign-rm/:companyCode', protectAdmin, async (req, res) => {
     const company = await User.findOneAndUpdate(
       { companyCode },
       { relationshipManager: rmData },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!company) return res.status(404).json({ success: false, message: 'Company not found' });
     

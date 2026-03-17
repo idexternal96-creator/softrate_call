@@ -42,7 +42,7 @@ router.patch('/:id/code', async (req, res) => {
     const employee = await Employee.findByIdAndUpdate(
       req.params.id,
       { employeeCode: employeeCode.trim() },
-      { new: true },
+      { returnDocument: 'after' },
     );
     if (!employee) {
       return res.status(404).json({ success: false, message: 'Employee not found.' });
@@ -65,7 +65,7 @@ router.patch('/:id/tags', async (req, res) => {
     const employee = await Employee.findByIdAndUpdate(
       req.params.id,
       { $set: { tags: tags } },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!employee) {
       return res.status(404).json({ success: false, message: 'Employee not found.' });
@@ -100,7 +100,7 @@ router.put('/:id', async (req, res) => {
     const employee = await Employee.findByIdAndUpdate(
       req.params.id,
       { $set: updateData },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!employee) {
