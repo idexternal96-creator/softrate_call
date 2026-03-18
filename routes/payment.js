@@ -21,6 +21,17 @@ function getTeamSizeMax(teamSize) {
   return 10;
 }
 
+/**
+ * Parse a date string ("YYYY-MM-DD" or ISO) as LOCAL midnight.
+ * Avoids the UTC off-by-one shift that affects IST (+5:30) and other UTC+ zones.
+ */
+function parseDateLocal(dateStr) {
+  if (!dateStr) return null;
+  const d = String(dateStr).substring(0, 10); // take only "YYYY-MM-DD"
+  const [y, m, day] = d.split('-').map(Number);
+  return new Date(y, m - 1, day);
+}
+
 function getRazorpay() {
   return new Razorpay({
     key_id: process.env.RAZORPAY_KEY_ID,
@@ -54,19 +65,25 @@ router.get('/calculate', async (req, res) => {
     }
 
     const now = new Date();
-    let fromDate = new Date();
-    
+    now.setHours(0, 0, 0, 0);
+    let fromDate = new Date(now);
+
     // If companyCode provided, this is a renewal preview
     if (companyCode) {
       const user = await User.findOne({ companyCode: companyCode.toUpperCase() });
-      if (user && user.subscriptionTo && new Date(user.subscriptionTo) > now) {
-        fromDate = new Date(user.subscriptionTo);
-        fromDate.setDate(fromDate.getDate() + 1);
+      if (user && user.subscriptionTo) {
+        const subEnd = parseDateLocal(user.subscriptionTo.toISOString ? user.subscriptionTo.toISOString() : user.subscriptionTo);
+        subEnd.setHours(23, 59, 59, 999);
+        if (subEnd >= now) {
+          // Still active → start from day AFTER subscription ends
+          const [sY, sM, sD] = subEnd.toISOString().substring(0,10).split('-').map(Number);
+          fromDate = new Date(sY, sM - 1, sD + 1, 0, 0, 0, 0);
+        }
+        // else expired → fromDate stays as today
       }
     }
-    
-    fromDate.setHours(0, 0, 0, 0);
-    const to = new Date(toDate);
+
+    const to = parseDateLocal(toDate);
     to.setHours(23, 59, 59, 999);
 
     if (to <= fromDate) {
@@ -352,19 +369,26 @@ router.post('/renew', async (req, res) => {
     const user = await User.findOne({ companyCode });
     if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
 
-    const now = new Date();
-    let fromDate = new Date();
-    // If subscription is still active, start from the day AFTER it expires
-    if (user.subscriptionTo && user.subscriptionTo > now) {
-      fromDate = new Date(user.subscriptionTo);
-      fromDate.setDate(fromDate.getDate() + 1);
-    }
-    fromDate.setHours(0, 0, 0, 0);
-    
-    const to = new Date(toDate);
-    to.setHours(23, 59, 59, 999);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let fromDate = new Date(today);
 
-    if (to <= fromDate) return res.status(400).json({ success: false, message: 'Select a date after the current subscription ends.' });
+    if (user.subscriptionTo) {
+      // Parse subscriptionTo in local time to avoid UTC off-by-one in IST
+      const subEndRaw = user.subscriptionTo.toISOString ? user.subscriptionTo.toISOString() : String(user.subscriptionTo);
+      const subEnd = parseDateLocal(subEndRaw);
+      subEnd.setHours(23, 59, 59, 999);
+
+      if (subEnd >= today) {
+        // Subscription still active → start from the day AFTER it ends
+        const [sY, sM, sD] = subEndRaw.substring(0, 10).split('-').map(Number);
+        fromDate = new Date(sY, sM - 1, sD + 1, 0, 0, 0, 0);
+      }
+      // else expired → fromDate stays as today
+    }
+
+    const to = parseDateLocal(toDate);
+    to.setHours(23, 59, 59, 999);
 
     const days = Math.ceil((to - fromDate) / (1000 * 60 * 60 * 24));
     const teamSizeMax = getTeamSizeMax(user.teamSize);
