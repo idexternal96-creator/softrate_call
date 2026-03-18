@@ -21,15 +21,33 @@ function getTeamSizeMax(teamSize) {
   return 10;
 }
 
-/**
- * Parse a date string ("YYYY-MM-DD" or ISO) as LOCAL midnight.
- * Avoids the UTC off-by-one shift that affects IST (+5:30) and other UTC+ zones.
- */
-function parseDateLocal(dateStr) {
-  if (!dateStr) return null;
-  const d = String(dateStr).substring(0, 10); // take only "YYYY-MM-DD"
-  const [y, m, day] = d.split('-').map(Number);
-  return new Date(y, m - 1, day);
+/** Returns today's date as YYYY-MM-DD in IST */
+function todayIST() {
+  const ist = new Date(Date.now() + 5.5 * 60 * 60 * 1000);
+  return ist.toISOString().substring(0, 10);
+}
+
+/** Converts any Date to its YYYY-MM-DD calendar day in IST */
+function toISTDateStr(date) {
+  const ist = new Date(date.getTime() + 5.5 * 60 * 60 * 1000);
+  return ist.toISOString().substring(0, 10);
+}
+
+/** Returns a Date for the START of a given YYYY-MM-DD date in IST */
+function parseISTStart(dateStr) {
+  return new Date(String(dateStr).substring(0, 10) + 'T00:00:00.000+05:30');
+}
+
+/** Returns a Date for the END of a given YYYY-MM-DD date in IST */
+function parseISTEnd(dateStr) {
+  return new Date(String(dateStr).substring(0, 10) + 'T23:59:59.999+05:30');
+}
+
+/** Adds N calendar days to a YYYY-MM-DD string, returns new YYYY-MM-DD */
+function addDays(dateStr, n) {
+  const [y, m, d] = String(dateStr).substring(0, 10).split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + n));
+  return dt.toISOString().substring(0, 10);
 }
 
 function getRazorpay() {
@@ -64,32 +82,28 @@ router.get('/calculate', async (req, res) => {
       return res.status(400).json({ success: false, message: 'teamSize and toDate are required.' });
     }
 
-    const now = new Date();
-    now.setHours(0, 0, 0, 0);
-    let fromDate = new Date(now);
+    let fromDateStr = todayIST();
 
     // If companyCode provided, this is a renewal preview
     if (companyCode) {
       const user = await User.findOne({ companyCode: companyCode.toUpperCase() });
       if (user && user.subscriptionTo) {
-        const subEnd = parseDateLocal(user.subscriptionTo.toISOString ? user.subscriptionTo.toISOString() : user.subscriptionTo);
-        subEnd.setHours(23, 59, 59, 999);
-        if (subEnd >= now) {
+        const subToStr = toISTDateStr(new Date(user.subscriptionTo));
+        if (subToStr >= todayIST()) {
           // Still active → start from day AFTER subscription ends
-          const [sY, sM, sD] = subEnd.toISOString().substring(0,10).split('-').map(Number);
-          fromDate = new Date(sY, sM - 1, sD + 1, 0, 0, 0, 0);
+          fromDateStr = addDays(subToStr, 1);
         }
-        // else expired → fromDate stays as today
+        // else expired → fromDateStr stays as today
       }
     }
 
-    const to = parseDateLocal(toDate);
-    to.setHours(23, 59, 59, 999);
-
-    if (to <= fromDate) {
+    const toDateStr = String(toDate).substring(0, 10);
+    if (toDateStr <= fromDateStr) {
       return res.status(400).json({ success: false, message: 'Select a date after the current subscription ends.' });
     }
 
+    const fromDate = parseISTStart(fromDateStr);
+    const to      = parseISTEnd(toDateStr);
     const days = Math.ceil((to - fromDate) / (1000 * 60 * 60 * 24));
     const teamSizeMax = getTeamSizeMax(teamSize);
     const amountRupees = teamSizeMax * PRICE_PER_PERSON_PER_DAY * days;
@@ -100,6 +114,7 @@ router.get('/calculate', async (req, res) => {
     return res.status(500).json({ success: false, message: 'Server error.' });
   }
 });
+
 
 /* ─────────────────────────────────────────────
    POST /api/payment/pre-order
@@ -369,28 +384,24 @@ router.post('/renew', async (req, res) => {
     const user = await User.findOne({ companyCode });
     if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    let fromDate = new Date(today);
+    const todayStr = todayIST();
+    let fromDateStr = todayStr;
 
     if (user.subscriptionTo) {
-      // Parse subscriptionTo in local time to avoid UTC off-by-one in IST
-      const subEndRaw = user.subscriptionTo.toISOString ? user.subscriptionTo.toISOString() : String(user.subscriptionTo);
-      const subEnd = parseDateLocal(subEndRaw);
-      subEnd.setHours(23, 59, 59, 999);
-
-      if (subEnd >= today) {
+      const subToStr = toISTDateStr(new Date(user.subscriptionTo));
+      if (subToStr >= todayStr) {
         // Subscription still active → start from the day AFTER it ends
-        const [sY, sM, sD] = subEndRaw.substring(0, 10).split('-').map(Number);
-        fromDate = new Date(sY, sM - 1, sD + 1, 0, 0, 0, 0);
+        fromDateStr = addDays(subToStr, 1);
       }
-      // else expired → fromDate stays as today
+      // else expired → fromDateStr stays as today
     }
 
-    const to = parseDateLocal(toDate);
-    to.setHours(23, 59, 59, 999);
+    const toDateStr = String(toDate).substring(0, 10);
+    const fromDate = parseISTStart(fromDateStr);
+    const to       = parseISTEnd(toDateStr);
 
     const days = Math.ceil((to - fromDate) / (1000 * 60 * 60 * 24));
+
     const teamSizeMax = getTeamSizeMax(user.teamSize);
     const amountPaise = teamSizeMax * PRICE_PER_PERSON_PER_DAY * days * 100;
 
