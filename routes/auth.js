@@ -468,6 +468,15 @@ router.post('/reset-password', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Password reset token is invalid or has expired.' });
     }
 
+    // Check if new password is same as currently stored password
+    const isCurrentMatch = await bcrypt.compare(newPassword, user.password);
+    if (isCurrentMatch) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be different from your current password.'
+      });
+    }
+
     // Update password
     const salt = await bcrypt.genSalt(12);
     user.password = await bcrypt.hash(newPassword, salt);
