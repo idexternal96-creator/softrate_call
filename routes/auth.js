@@ -408,6 +408,14 @@ router.post('/forgot-password', async (req, res) => {
       });
     }
 
+    // Rate-limit check: Only allow reset request once every 5 minutes
+    if (user.resetPasswordExpires && (user.resetPasswordExpires - Date.now() > 3300000)) {
+      return res.status(429).json({ 
+        success: false, 
+        message: 'A reset link was recently sent. Please check your email or wait a few minutes.' 
+      });
+    }
+
     // Generate token
     const token = crypto.randomBytes(20).toString('hex');
     user.resetPasswordToken = token;
