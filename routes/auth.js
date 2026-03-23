@@ -1,5 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://calluserfrontend.netlify.app';
 const User = require('../models/User');
 const { 
   notifyAdminOfRequest, 
@@ -427,7 +428,7 @@ router.post('/forgot-password', async (req, res) => {
     await user.save();
 
     // Reset URL (adjust based on development/production)
-    const resetURL = `${req.headers.origin}?resetToken=${token}`;
+    const resetURL = `${req.headers.origin || FRONTEND_URL}?resetToken=${token}`;
 
     // Send email
     await sendResetPasswordEmail(user, resetURL);

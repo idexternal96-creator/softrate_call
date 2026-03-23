@@ -3,6 +3,7 @@ const { Resend } = require('resend');
 const resend = (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim()) ? new Resend(process.env.RESEND_API_KEY.trim()) : null;
 const FROM_EMAIL = (process.env.FROM_EMAIL && process.env.FROM_EMAIL.trim()) || 'onboarding@resend.dev';
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL && process.env.ADMIN_EMAIL.trim()) || 'admin@softrate.com';
+const FRONTEND_URL = (process.env.FRONTEND_URL && process.env.FRONTEND_URL.trim()) || 'https://calluserfrontend.netlify.app';
 
 const sendEmail = async ({ to, subject, html }) => {
 
@@ -57,7 +58,7 @@ const notifyCompanyOfApproval = (company) => {
       <p>Your free trial for <strong>${company.companyName}</strong> has been approved by our admin.</p>
       <p>You can now log in and start using DealVoice for the next 7 days.</p>
       <p><strong>Your Company Code:</strong> ${company.companyCode}</p>
-      <p><a href="http://localhost:4200">Login Now</a></p>
+      <p><a href="${FRONTEND_URL}">Login Now</a></p>
       <p>After 7 days, your account will move to 'On due' status unless upgraded.</p>
     `,
   });
