@@ -266,6 +266,10 @@ router.put('/company/:companyCode/password', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Incorrect old password.' });
     }
 
+    if (oldPassword === newPassword) {
+      return res.status(400).json({ success: false, message: 'New password cannot be the same as the old one.' });
+    }
+
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
