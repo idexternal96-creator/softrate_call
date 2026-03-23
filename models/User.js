@@ -99,6 +99,8 @@ const userSchema = new mongoose.Schema(
     subscriptionTo: {
       type: Date,
     },
+    resetPasswordToken: String,
+    resetPasswordExpires: Date,
   },
   {
     timestamps: true, // adds createdAt & updatedAt automatically

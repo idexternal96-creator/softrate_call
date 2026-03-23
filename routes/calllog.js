@@ -301,24 +301,50 @@ router.get('/details', async (req, res) => {
 });
 
 // ── GET /api/calllogs/timeline ────────────────────────────────
-// Returns array of { date, incoming, outgoing, missed, rejected } per day in range
+// Returns array of { date, incoming, outgoing, missed, rejected } per day (or per hour for single day)
 router.get('/timeline', async (req, res) => {
   try {
     const { companyCode } = req.query;
     if (!companyCode) return res.status(400).json({ success: false, message: 'companyCode required' });
     const [from, to] = resolveRange(req.query);
-    const docs = await CallLog.find({ companyCode, date: { $gte: from, $lte: to } }).sort({ date: 1 });
 
-    // Group by date
-    const byDate = {};
-    for (const d of docs) {
-      if (!byDate[d.date]) byDate[d.date] = { date: d.date, incoming: 0, outgoing: 0, missed: 0, rejected: 0 };
-      byDate[d.date].incoming  += d.incoming;
-      byDate[d.date].outgoing  += d.outgoing;
-      byDate[d.date].missed    += d.missed;
-      byDate[d.date].rejected  += d.rejected;
+    if (from === to) {
+      // Single day: group by hour from CallDetail
+      const calls = await CallDetail.find({ companyCode, date: from });
+      const byHour = {};
+      
+      // Initialize all 24 hours to ensure a continuous line
+      for (let i = 0; i < 24; i++) {
+        const hourStr = i.toString().padStart(2, '0');
+        // We use a pseudo-date string so the frontend can still use new Date()
+        const pseudoDate = `${from}T${hourStr}:00:00`;
+        byHour[i] = { date: pseudoDate, incoming: 0, outgoing: 0, missed: 0, rejected: 0, _isHourly: true };
+      }
+
+      for (const c of calls) {
+        const hour = new Date(c.timestamp).getHours();
+        const type = c.callType.toLowerCase();
+        if (byHour[hour]) {
+          if (type === 'incoming') byHour[hour].incoming++;
+          else if (type === 'outgoing') byHour[hour].outgoing++;
+          else if (type === 'missed') byHour[hour].missed++;
+          else if (type === 'rejected') byHour[hour].rejected++;
+        }
+      }
+      return res.status(200).json({ success: true, timeline: Object.values(byHour) });
+    } else {
+      // Multiple days: group by date from CallLog
+      const docs = await CallLog.find({ companyCode, date: { $gte: from, $lte: to } }).sort({ date: 1 });
+      const byDate = {};
+      for (const d of docs) {
+        if (!byDate[d.date]) byDate[d.date] = { date: d.date, incoming: 0, outgoing: 0, missed: 0, rejected: 0 };
+        byDate[d.date].incoming  += d.incoming;
+        byDate[d.date].outgoing  += d.outgoing;
+        byDate[d.date].missed    += d.missed;
+        byDate[d.date].rejected  += d.rejected;
+      }
+      return res.status(200).json({ success: true, timeline: Object.values(byDate).sort((a,b) => a.date.localeCompare(b.date)) });
     }
-    return res.status(200).json({ success: true, timeline: Object.values(byDate) });
   } catch (err) {
     console.error('[calllog timeline]', err);
     return res.status(500).json({ success: false, message: 'Server error' });

@@ -1,7 +1,12 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
-const { notifyAdminOfRequest, notifyAdminOfRmRequest } = require('../services/mailService');
+const { 
+  notifyAdminOfRequest, 
+  notifyAdminOfRmRequest,
+  sendResetPasswordEmail
+} = require('../services/mailService');
+const crypto = require('crypto');
 
 const router = express.Router();
 
@@ -382,6 +387,85 @@ router.put('/company/:companyCode/assign-rm', async (req, res) => {
     return res.status(200).json({ success: true, message: 'RM assigned!', company: user });
   } catch (err) {
     console.error('[assign rm]', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
+/* ─────────────────────────────────────────────
+   POST /api/auth/forgot-password
+───────────────────────────────────────────── */
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success: false, message: 'Email is required.' });
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      // For security reasons, don't confirm if user exists or not
+      return res.status(200).json({ 
+        success: true, 
+        message: 'If an account with that email exists, we have sent a reset link.' 
+      });
+    }
+
+    // Generate token
+    const token = crypto.randomBytes(20).toString('hex');
+    user.resetPasswordToken = token;
+    user.resetPasswordExpires = Date.now() + 3600000; // 1 hour
+    await user.save();
+
+    // Reset URL (adjust based on development/production)
+    const resetURL = `${req.headers.origin}?resetToken=${token}`;
+
+    // Send email
+    await sendResetPasswordEmail(user, resetURL);
+
+    return res.status(200).json({ 
+      success: true, 
+      message: 'If an account with that email exists, we have sent a reset link.' 
+    });
+  } catch (err) {
+    console.error('[forgot-password error]:', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
+/* ─────────────────────────────────────────────
+   POST /api/auth/reset-password
+───────────────────────────────────────────── */
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Token and new password are required.' });
+    }
+
+    if (!isStrongPassword(newPassword)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 8 characters and include an uppercase letter, a number, and a symbol.',
+      });
+    }
+
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Password reset token is invalid or has expired.' });
+    }
+
+    // Update password
+    const salt = await bcrypt.genSalt(12);
+    user.password = await bcrypt.hash(newPassword, salt);
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    return res.status(200).json({ success: true, message: 'Your password has been reset. You can now log in.' });
+  } catch (err) {
+    console.error('[reset-password error]:', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
   }
 });

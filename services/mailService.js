@@ -94,10 +94,31 @@ const notifyAdminOfRmRequest = (company) => {
   });
 };
 
+const sendResetPasswordEmail = (user, resetURL) => {
+  return sendEmail({
+    to: user.email,
+    subject: 'DealVoice - Reset Your Password',
+    html: `
+      <h2>Password Reset Request</h2>
+      <p>Hi ${user.name},</p>
+      <p>We received a request to reset your password for your <strong>${user.companyName}</strong> account.</p>
+      <p>Click the link below to set a new password. This link will expire in 1 hour.</p>
+      <div style="margin: 24px 0;">
+        <a href="${resetURL}" style="background-color: #6366f1; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 600;">Reset Password</a>
+      </div>
+      <p>If the button doesn't work, copy and paste this URL into your browser:</p>
+      <p>${resetURL}</p>
+      <p>If you didn't request a password reset, you can safely ignore this email.</p>
+      <p>Best regards,<br>The DealVoice Team</p>
+    `,
+  });
+};
+
 module.exports = {
   sendEmail,
   notifyAdminOfRequest,
   notifyCompanyOfApproval,
   notifyCompanyOfRejection,
   notifyAdminOfRmRequest,
+  sendResetPasswordEmail,
 };
