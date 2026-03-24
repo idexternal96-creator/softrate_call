@@ -12,6 +12,7 @@ const TEAM_SIZE_MAP = {
   '1-5': 5, '6-10': 10, '11-15': 15, '16-25': 25, '26-50': 50, '50+': 75,
 };
 const PRICE_PER_PERSON_PER_DAY = 10; // ₹10
+const GST_PERCENTAGE = 18; // 18% GST
 
 function getTeamSizeMax(teamSize) {
   if (!teamSize) return 10;
@@ -106,9 +107,20 @@ router.get('/calculate', async (req, res) => {
     const to      = parseISTEnd(toDateStr);
     const days = Math.ceil((to - fromDate) / (1000 * 60 * 60 * 24));
     const teamSizeMax = getTeamSizeMax(teamSize);
-    const amountRupees = teamSizeMax * PRICE_PER_PERSON_PER_DAY * days;
+    const subtotalRupees = teamSizeMax * PRICE_PER_PERSON_PER_DAY * days;
+    const taxRupees = Math.round(subtotalRupees * GST_PERCENTAGE) / 100;
+    const totalRupees = subtotalRupees + taxRupees;
 
-    return res.json({ success: true, fromDate, toDate: to, days, teamSize, teamSizeMax, pricePerPersonPerDay: PRICE_PER_PERSON_PER_DAY, amountRupees, amountPaise: amountRupees * 100 });
+    return res.json({ 
+      success: true, 
+      fromDate, toDate: to, days, teamSize, teamSizeMax, 
+      pricePerPersonPerDay: PRICE_PER_PERSON_PER_DAY,
+      subtotalRupees,
+      taxPercentage: GST_PERCENTAGE,
+      taxRupees,
+      amountRupees: totalRupees, 
+      amountPaise: Math.round(totalRupees * 100)
+    });
   } catch (err) {
     console.error('[payment/calculate]', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
@@ -148,7 +160,9 @@ router.post('/pre-order', async (req, res) => {
 
     const days = Math.ceil((to - fromDate) / (1000 * 60 * 60 * 24));
     const teamSizeMax = getTeamSizeMax(teamSize);
-    const amountPaise = teamSizeMax * PRICE_PER_PERSON_PER_DAY * days * 100;
+    const subtotalPaise = teamSizeMax * PRICE_PER_PERSON_PER_DAY * days * 100;
+    const taxPaise = Math.round(subtotalPaise * (GST_PERCENTAGE / 100));
+    const amountPaise = subtotalPaise + taxPaise;
 
     // Hash password to store temporarily
     const salt = await bcrypt.genSalt(12);
@@ -172,6 +186,9 @@ router.post('/pre-order', async (req, res) => {
       teamSizeMax,
       pricePerPersonPerDay: PRICE_PER_PERSON_PER_DAY,
       days,
+      subtotal: subtotalPaise,
+      tax: taxPaise,
+      taxPercentage: GST_PERCENTAGE,
       status: 'created',
       pendingSignup: { companyName, companyAddress, name, email: email.toLowerCase(), passwordHash, countryCode: countryCode || '+91', mobile, teamSize, industry },
     });
@@ -403,7 +420,9 @@ router.post('/renew', async (req, res) => {
     const days = Math.ceil((to - fromDate) / (1000 * 60 * 60 * 24));
 
     const teamSizeMax = getTeamSizeMax(user.teamSize);
-    const amountPaise = teamSizeMax * PRICE_PER_PERSON_PER_DAY * days * 100;
+    const subtotalPaise = teamSizeMax * PRICE_PER_PERSON_PER_DAY * days * 100;
+    const taxPaise = Math.round(subtotalPaise * (GST_PERCENTAGE / 100));
+    const amountPaise = subtotalPaise + taxPaise;
 
     const razorpay = getRazorpay();
     const order = await razorpay.orders.create({
@@ -415,7 +434,9 @@ router.post('/renew', async (req, res) => {
     await Payment.create({
       companyCode, userId: user._id, razorpayOrderId: order.id,
       amount: amountPaise, fromDate, toDate: to,
-      teamSize: user.teamSize, teamSizeMax, pricePerPersonPerDay: PRICE_PER_PERSON_PER_DAY, days, status: 'created',
+      teamSize: user.teamSize, teamSizeMax, pricePerPersonPerDay: PRICE_PER_PERSON_PER_DAY, days, 
+      subtotal: subtotalPaise, tax: taxPaise, taxPercentage: GST_PERCENTAGE,
+      status: 'created',
     });
 
     return res.json({

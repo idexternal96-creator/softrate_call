@@ -29,6 +29,9 @@ const paymentSchema = new mongoose.Schema(
     teamSizeMax:           { type: Number },
     pricePerPersonPerDay:  { type: Number, default: 10 },
     days:                  { type: Number },
+    subtotal:              { type: Number }, // in paise
+    tax:                   { type: Number }, // in paise
+    taxPercentage:         { type: Number, default: 18 },
 
     status: {
       type: String,
