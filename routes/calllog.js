@@ -113,16 +113,24 @@ router.post('/sync', async (req, res) => {
 
       // 2. Recalculate daily aggregate from individual DETAIL records for total accuracy
       const allCallsToday = await CallDetail.find({ companyCode, phone, date });
-      let inc = 0, out = 0, mis = 0, rej = 0;
+      let inc = 0, out = 0, mis = 0, rej = 0, conn = 0;
+      let incConn = 0, outConn = 0;
       let incDur = 0, outDur = 0, totDur = 0;
 
       for (const c of allCallsToday) {
         const type = c.callType.toLowerCase();
         const dur = c.duration || 0;
         totDur += dur;
+        if (dur > 0) conn++;
 
-        if (type === 'incoming') { inc++; incDur += dur; }
-        else if (type === 'outgoing') { out++; outDur += dur; }
+        if (type === 'incoming') { 
+          inc++; incDur += dur; 
+          if (dur > 0) incConn++;
+        }
+        else if (type === 'outgoing') { 
+          out++; outDur += dur; 
+          if (dur > 0) outConn++;
+        }
         else if (type === 'missed') { mis++; }
         else if (type === 'rejected') { rej++; }
       }
@@ -134,6 +142,9 @@ router.post('/sync', async (req, res) => {
             incoming: inc, outgoing: out, missed: mis, rejected: rej,
             incomingDuration: incDur, outgoingDuration: outDur,
             totalDuration: totDur, 
+            connected: conn,
+            incomingConnected: incConn,
+            outgoingConnected: outConn,
             updatedAt: new Date() 
           } 
         },
@@ -182,11 +193,21 @@ router.get('/summary', async (req, res) => {
     if (!companyCode) return res.status(400).json({ success: false, message: 'companyCode required' });
     const [from, to] = resolveRange(req.query);
     const docs = await CallLog.find({ companyCode, date: { $gte: from, $lte: to } });
-    const totals = sumDocs(docs);
+    const totals = docs.reduce((acc, d) => ({
+      incoming: acc.incoming + d.incoming, outgoing: acc.outgoing + d.outgoing,
+      missed: acc.missed + d.missed, rejected: acc.rejected + d.rejected,
+      incomingDuration: acc.incomingDuration + d.incomingDuration,
+      outgoingDuration: acc.outgoingDuration + d.outgoingDuration,
+      totalDuration: acc.totalDuration + d.totalDuration,
+      connected: acc.connected + (d.connected || 0),
+      incomingConnected: acc.incomingConnected + (d.incomingConnected || 0),
+      outgoingConnected: acc.outgoingConnected + (d.outgoingConnected || 0),
+    }), { incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0, connected:0, incomingConnected:0, outgoingConnected:0 });
+
     return res.status(200).json({
       success: true, from, to,
       stats: { ...totals, total: totals.incoming+totals.outgoing+totals.missed+totals.rejected,
-               connected: totals.incoming+totals.outgoing },
+               connected: totals.connected },
     });
   } catch (err) {
     console.error('[calllog summary]', err);
@@ -235,14 +256,23 @@ router.get('/employees', async (req, res) => {
       // Aggregate filtered calls by employee
       const map = {};
       for (const c of calls) {
-        if (!map[c.phone]) map[c.phone] = { phone: c.phone, incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0 };
+        if (!map[c.phone]) map[c.phone] = { phone: c.phone, incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0, connected:0, incomingConnected:0, outgoingConnected:0 };
         const e = map[c.phone];
         const type = c.callType.toLowerCase();
-        if (type === 'incoming') { e.incoming++; e.incomingDuration += c.duration; }
-        else if (type === 'outgoing') { e.outgoing++; e.outgoingDuration += c.duration; }
+        const dur = c.duration || 0;
+        if (dur > 0) e.connected++;
+        
+        if (type === 'incoming') { 
+          e.incoming++; e.incomingDuration += dur; 
+          if (dur > 0) e.incomingConnected++;
+        }
+        else if (type === 'outgoing') { 
+          e.outgoing++; e.outgoingDuration += dur; 
+          if (dur > 0) e.outgoingConnected++;
+        }
         else if (type === 'missed') { e.missed++; }
         else if (type === 'rejected') { e.rejected++; }
-        e.totalDuration += c.duration;
+        e.totalDuration += dur;
       }
       const employees = Object.values(map).map(e => ({ ...e, total: e.incoming+e.outgoing+e.missed+e.rejected }));
       return res.status(200).json({ success: true, employees });
@@ -252,10 +282,13 @@ router.get('/employees', async (req, res) => {
     const docs = await CallLog.find({ companyCode, date: { $gte: from, $lte: to } });
     const map = {};
     for (const d of docs) {
-      if (!map[d.phone]) map[d.phone] = { phone: d.phone, incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0 };
+      if (!map[d.phone]) map[d.phone] = { phone: d.phone, incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0, connected:0, incomingConnected:0, outgoingConnected:0 };
       const e = map[d.phone];
       e.incoming+=d.incoming; e.outgoing+=d.outgoing; e.missed+=d.missed; e.rejected+=d.rejected;
       e.incomingDuration+=d.incomingDuration; e.outgoingDuration+=d.outgoingDuration; e.totalDuration+=d.totalDuration;
+      e.connected += (d.connected || 0);
+      e.incomingConnected += (d.incomingConnected || 0);
+      e.outgoingConnected += (d.outgoingConnected || 0);
     }
     const employees = Object.values(map).map(e => ({ ...e, total: e.incoming+e.outgoing+e.missed+e.rejected }));
     return res.status(200).json({ success: true, employees });
@@ -272,10 +305,20 @@ router.get('/employee', async (req, res) => {
     if (!companyCode || !phone) return res.status(400).json({ success: false, message: 'companyCode and phone required' });
     const [from, to] = resolveRange(req.query);
     const docs = await CallLog.find({ companyCode, phone, date: { $gte: from, $lte: to } });
-    const totals = sumDocs(docs);
+    const totals = docs.reduce((acc, d) => ({
+      incoming: acc.incoming + d.incoming, outgoing: acc.outgoing + d.outgoing,
+      missed: acc.missed + d.missed, rejected: acc.rejected + d.rejected,
+      incomingDuration: acc.incomingDuration + d.incomingDuration,
+      outgoingDuration: acc.outgoingDuration + d.outgoingDuration,
+      totalDuration: acc.totalDuration + d.totalDuration,
+      connected: acc.connected + (d.connected || 0),
+      incomingConnected: acc.incomingConnected + (d.incomingConnected || 0),
+      outgoingConnected: acc.outgoingConnected + (d.outgoingConnected || 0),
+    }), { incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0, connected:0, incomingConnected:0, outgoingConnected:0 });
+
     return res.status(200).json({
       success: true, phone, from, to,
-      stats: { ...totals, total: totals.incoming+totals.outgoing+totals.missed+totals.rejected, connected: totals.incoming+totals.outgoing },
+      stats: { ...totals, total: totals.incoming+totals.outgoing+totals.missed+totals.rejected, connected: totals.connected },
     });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Server error' });

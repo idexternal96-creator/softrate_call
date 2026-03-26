@@ -11,6 +11,9 @@ const callLogSchema = new mongoose.Schema({
   incomingDuration:  { type: Number, default: 0 },        // seconds
   outgoingDuration:  { type: Number, default: 0 },
   totalDuration:     { type: Number, default: 0 },
+  connected:         { type: Number, default: 0 },
+  incomingConnected: { type: Number, default: 0 },
+  outgoingConnected: { type: Number, default: 0 },
   updatedAt: { type: Date, default: Date.now },
 });
 
