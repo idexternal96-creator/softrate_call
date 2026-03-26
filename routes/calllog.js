@@ -120,15 +120,14 @@ router.post('/sync', async (req, res) => {
       for (const c of allCallsToday) {
         const type = c.callType.toLowerCase();
         const dur = c.duration || 0;
-        totDur += dur;
         if (dur > 0) conn++;
 
         if (type === 'incoming') { 
-          inc++; incDur += dur; 
+          inc++; incDur += dur; totDur += dur;
           if (dur > 0) incConn++;
         }
         else if (type === 'outgoing') { 
-          out++; outDur += dur; 
+          out++; outDur += dur; totDur += dur;
           if (dur > 0) outConn++;
         }
         else if (type === 'missed') { mis++; }
@@ -263,16 +262,15 @@ router.get('/employees', async (req, res) => {
         if (dur > 0) e.connected++;
         
         if (type === 'incoming') { 
-          e.incoming++; e.incomingDuration += dur; 
+          e.incoming++; e.incomingDuration += dur; e.totalDuration += dur;
           if (dur > 0) e.incomingConnected++;
         }
         else if (type === 'outgoing') { 
-          e.outgoing++; e.outgoingDuration += dur; 
+          e.outgoing++; e.outgoingDuration += dur; e.totalDuration += dur;
           if (dur > 0) e.outgoingConnected++;
         }
         else if (type === 'missed') { e.missed++; }
         else if (type === 'rejected') { e.rejected++; }
-        e.totalDuration += dur;
       }
       const employees = Object.values(map).map(e => ({ ...e, total: e.incoming+e.outgoing+e.missed+e.rejected }));
       return res.status(200).json({ success: true, employees });
