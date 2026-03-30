@@ -457,7 +457,7 @@ router.get('/history/:companyCode', async (req, res) => {
   try {
     const companyCode = req.params.companyCode.toUpperCase();
     const payments = await Payment.find({ companyCode }).sort({ createdAt: -1 });
-    return res.json({ success: true, payments });
+    return res.json({ success: true, payments, keyId: process.env.RAZORPAY_KEY_ID });
   } catch (err) {
     console.error('[payment/history]', err);
     return res.status(500).json({ success: false, message: 'Server error.' });
