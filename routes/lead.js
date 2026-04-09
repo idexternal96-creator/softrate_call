@@ -35,7 +35,8 @@ router.post('/bulk', async (req, res) => {
     console.error('[bulk post leads]', err);
     return res.status(500).json({ success: false, message: 'Server error bulk saving leads.' });
   }
-});
+}
+);
 
 // GET — fetch all leads for an employee
 router.get('/employee', async (req, res) => {
