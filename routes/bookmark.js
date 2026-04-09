@@ -49,4 +49,21 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// PATCH — update a bookmark by ID
+router.patch('/:id', async (req, res) => {
+  try {
+    const { description, reminderDate } = req.body;
+    const bookmark = await Bookmark.findByIdAndUpdate(
+      req.params.id,
+      { description, reminderDate },
+      { new: true }
+    );
+    if (!bookmark) return res.status(404).json({ success: false, message: 'Bookmark not found.' });
+    return res.status(200).json({ success: true, bookmark });
+  } catch (err) {
+    console.error('[patch bookmark]', err);
+    return res.status(500).json({ success: false, message: 'Server error updating bookmark.' });
+  }
+});
+
 module.exports = router;
