@@ -81,6 +81,9 @@ app.use('/api/payment', require('./routes/payment'));
 // CallLog routes
 app.use('/api/calllogs', require('./routes/calllog'));
 
+// Lead routes
+app.use('/api/leads', require('./routes/lead'));
+
 // Start Server
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
