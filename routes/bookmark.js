@@ -5,7 +5,7 @@ const router = express.Router();
 // POST — create a bookmark
 router.post('/', async (req, res) => {
   try {
-    const { companyCode, employeePhone, contactNumber, contactName, description, callTimestamp } = req.body;
+    const { companyCode, employeePhone, contactNumber, contactName, description, callTimestamp, reminderDate } = req.body;
     if (!companyCode || !employeePhone || !contactNumber) {
       return res.status(400).json({ success: false, message: 'companyCode, employeePhone and contactNumber are required.' });
     }
@@ -14,6 +14,7 @@ router.post('/', async (req, res) => {
       contactName: contactName || '',
       description: description || '',
       callTimestamp: callTimestamp || 0,
+      reminderDate: reminderDate || null,
     });
     return res.status(201).json({ success: true, bookmark });
   } catch (err) {

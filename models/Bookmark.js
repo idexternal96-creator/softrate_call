@@ -7,6 +7,7 @@ const bookmarkSchema = new mongoose.Schema({
   contactName:   { type: String, default: '' },
   description:   { type: String, default: '' },
   callTimestamp: { type: Number, default: 0 },  // original call timestamp
+  reminderDate:  { type: Date, default: null }, // for follow-ups
   createdAt:     { type: Date, default: Date.now },
 });
 
