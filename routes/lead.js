@@ -113,7 +113,7 @@ router.patch('/:id/status', async (req, res) => {
     if (!status) {
       return res.status(400).json({ success: false, message: 'Status is required.' });
     }
-    const lead = await Lead.findByIdAndUpdate(req.params.id, { status }, { new: true });
+    const lead = await Lead.findByIdAndUpdate(req.params.id, { status }, { returnDocument: 'after' });
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found.' });
     return res.status(200).json({ success: true, lead });
   } catch (err) {

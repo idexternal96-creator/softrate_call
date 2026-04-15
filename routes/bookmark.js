@@ -56,7 +56,7 @@ router.patch('/:id', async (req, res) => {
     const bookmark = await Bookmark.findByIdAndUpdate(
       req.params.id,
       { description, reminderDate },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!bookmark) return res.status(404).json({ success: false, message: 'Bookmark not found.' });
     return res.status(200).json({ success: true, bookmark });
