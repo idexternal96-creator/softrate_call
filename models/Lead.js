@@ -6,7 +6,8 @@ const leadSchema = new mongoose.Schema({
   leadCompanyName: { type: String, required: true },
   contactName:     { type: String, default: '' },
   contactNumber:   { type: String, required: true },
-  status:          { type: String, default: 'New' } // e.g. New, Contacted, Converted
+  status:          { type: String, default: 'New' }, // e.g. New, Contacted, Converted
+  setLabel:        { type: String, default: '' }      // e.g. "Jan 2026" or "1/1/2026-10/1/2026"
 }, { timestamps: true });
 
 module.exports = mongoose.model('Lead', leadSchema);

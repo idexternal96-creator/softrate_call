@@ -5,7 +5,7 @@ const router = express.Router();
 // POST — create a single lead
 router.post('/', async (req, res) => {
   try {
-    const { companyCode, assignedEmployeePhone, leadCompanyName, contactName, contactNumber, status } = req.body;
+    const { companyCode, assignedEmployeePhone, leadCompanyName, contactName, contactNumber, status, setLabel } = req.body;
     if (!companyCode || !assignedEmployeePhone || !contactNumber || !leadCompanyName) {
       return res.status(400).json({ success: false, message: 'companyCode, assignedEmployeePhone, leadCompanyName, and contactNumber are required.' });
     }
@@ -14,6 +14,7 @@ router.post('/', async (req, res) => {
       contactName: contactName || '',
       contactNumber,
       status: status || 'New',
+      setLabel: setLabel || '',
     });
     return res.status(201).json({ success: true, lead });
   } catch (err) {
@@ -35,40 +36,66 @@ router.post('/bulk', async (req, res) => {
     console.error('[bulk post leads]', err);
     return res.status(500).json({ success: false, message: 'Server error bulk saving leads.' });
   }
-}
-);
+});
 
-// GET — fetch all leads for an employee
+// GET — fetch all leads for an employee (optionally filter by setLabel)
 router.get('/employee', async (req, res) => {
   try {
-    const { companyCode, phone } = req.query;
+    const { companyCode, phone, setLabel } = req.query;
     if (!companyCode || !phone) {
       return res.status(400).json({ success: false, message: 'companyCode and phone are required.' });
     }
-    const leads = await Lead.find({ companyCode, assignedEmployeePhone: phone }).sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, leads });
+    const query = { companyCode, assignedEmployeePhone: phone };
+    if (setLabel) query.setLabel = setLabel;
+    const leads = await Lead.find(query).sort({ createdAt: -1 });
+
+    // Also return distinct set labels for this employee
+    const sets = await Lead.distinct('setLabel', { companyCode, assignedEmployeePhone: phone });
+
+    return res.status(200).json({ success: true, leads, sets: sets.filter(s => s && s.trim()) });
   } catch (err) {
     console.error('[get employee leads]', err);
     return res.status(500).json({ success: false, message: 'Server error fetching leads.' });
   }
 });
 
-// GET — fetch all leads for an admin's company
+// GET — fetch all leads for an admin's company (optionally filter by setLabel)
 router.get('/admin', async (req, res) => {
   try {
-    const { companyCode } = req.query;
+    const { companyCode, setLabel } = req.query;
     if (!companyCode) {
       return res.status(400).json({ success: false, message: 'companyCode is required.' });
     }
-    const leads = await Lead.find({ companyCode }).sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, leads });
+    const query = { companyCode };
+    if (setLabel) query.setLabel = setLabel;
+    const leads = await Lead.find(query).sort({ createdAt: -1 });
+
+    // Also return distinct set labels for this company
+    const sets = await Lead.distinct('setLabel', { companyCode });
+
+    return res.status(200).json({ success: true, leads, sets: sets.filter(s => s && s.trim()) });
   } catch (err) {
     console.error('[get admin leads]', err);
     return res.status(500).json({ success: false, message: 'Server error fetching leads.' });
   }
 });
 
-// DELETE — remove a lead by ID
+// POST — remove all leads in a set for an employee (must come BEFORE /:id to avoid route conflict)
+router.post('/set/delete', async (req, res) => {
+  try {
+    const { companyCode, phone, setLabel } = req.body;
+    if (!companyCode || !phone || !setLabel) {
+      return res.status(400).json({ success: false, message: 'companyCode, phone, and setLabel are required.' });
+    }
+    const result = await Lead.deleteMany({ companyCode, assignedEmployeePhone: phone, setLabel });
+    return res.status(200).json({ success: true, deleted: result.deletedCount });
+  } catch (err) {
+    console.error('[delete set leads]', err);
+    return res.status(500).json({ success: false, message: 'Server error deleting set.' });
+  }
+});
+
+// DELETE — remove a single lead by ID
 router.delete('/:id', async (req, res) => {
   try {
     await Lead.findByIdAndDelete(req.params.id);
