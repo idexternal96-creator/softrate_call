@@ -106,4 +106,20 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// PATCH — update lead status
+router.patch('/:id/status', async (req, res) => {
+  try {
+    const { status } = req.body;
+    if (!status) {
+      return res.status(400).json({ success: false, message: 'Status is required.' });
+    }
+    const lead = await Lead.findByIdAndUpdate(req.params.id, { status }, { new: true });
+    if (!lead) return res.status(404).json({ success: false, message: 'Lead not found.' });
+    return res.status(200).json({ success: true, lead });
+  } catch (err) {
+    console.error('[update lead status]', err);
+    return res.status(500).json({ success: false, message: 'Server error updating lead status.' });
+  }
+});
+
 module.exports = router;
