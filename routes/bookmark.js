@@ -86,13 +86,14 @@ router.delete('/:id', async (req, res) => {
 router.patch('/:id', async (req, res) => {
   try {
     const { 
-      description, remark, newRemark, reminderDate,
+      description, remark, newRemark, reminderDate, remarks,
       brochuresSent, techMeet, meetingRemarks, 
       quotationSent, proposalSent, whatsappGrp
     } = req.body;
 
     const updateData = {};
     if (description !== undefined) updateData.description = description;
+    if (remarks !== undefined) updateData.remarks = remarks; // Overwrite history if provided
     if (reminderDate !== undefined) updateData.reminderDate = reminderDate;
     if (brochuresSent !== undefined) updateData.brochuresSent = brochuresSent;
     if (techMeet !== undefined) updateData.techMeet = techMeet;
