@@ -392,4 +392,28 @@ router.get('/timeline', async (req, res) => {
   }
 });
 
+// ── GET /api/calllogs/lead-counts ─────────────────────────────
+// Returns total call count per lead number across the entire company
+router.get('/lead-counts', async (req, res) => {
+  try {
+    const { companyCode } = req.query;
+    if (!companyCode) return res.status(400).json({ success: false, message: 'companyCode required' });
+
+    const counts = await CallDetail.aggregate([
+      { $match: { companyCode } },
+      { $group: { _id: "$number", count: { $sum: 1 } } }
+    ]);
+
+    const countMap = {};
+    counts.forEach(c => {
+      if (c._id) countMap[c._id] = c.count;
+    });
+
+    return res.status(200).json({ success: true, counts: countMap });
+  } catch (err) {
+    console.error('[lead-counts]', err);
+    return res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
 module.exports = router;
