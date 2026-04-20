@@ -24,13 +24,17 @@ router.post('/', async (req, res) => {
 });
 
 // POST — create bulk leads via mapped JSON data (Excel upload)
+// Each object in `leads` must include a `sheetOrder` field (0-based row index
+// from the sheet) so that the original row sequence is preserved on fetch.
 router.post('/bulk', async (req, res) => {
   try {
     const { leads } = req.body; // Array of mapped lead objects
     if (!leads || !Array.isArray(leads) || leads.length === 0) {
       return res.status(400).json({ success: false, message: 'No leads provided for bulk insert.' });
     }
-    const createdLeads = await Lead.insertMany(leads);
+    // Stamp sheetOrder if caller didn't send it (safety net)
+    const stamped = leads.map((l, i) => ({ sheetOrder: i, ...l }));
+    const createdLeads = await Lead.insertMany(stamped);
     return res.status(201).json({ success: true, count: createdLeads.length });
   } catch (err) {
     console.error('[bulk post leads]', err);
@@ -47,7 +51,7 @@ router.get('/employee', async (req, res) => {
     }
     const query = { companyCode, assignedEmployeePhone: phone };
     if (setLabel) query.setLabel = setLabel;
-    const leads = await Lead.find(query).sort({ createdAt: -1 });
+    const leads = await Lead.find(query).sort({ sheetOrder: 1, createdAt: 1 }); // preserve sheet row order
 
     // Also return distinct set labels for this employee
     const sets = await Lead.distinct('setLabel', { companyCode, assignedEmployeePhone: phone });
@@ -68,7 +72,7 @@ router.get('/admin', async (req, res) => {
     }
     const query = { companyCode };
     if (setLabel) query.setLabel = setLabel;
-    const leads = await Lead.find(query).sort({ createdAt: -1 });
+    const leads = await Lead.find(query).sort({ sheetOrder: 1, createdAt: 1 }); // preserve sheet row order
 
     // Also return distinct set labels for this company
     const sets = await Lead.distinct('setLabel', { companyCode });
