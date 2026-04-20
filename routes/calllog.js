@@ -397,6 +397,7 @@ router.get('/timeline', async (req, res) => {
 router.get('/lead-counts', async (req, res) => {
   try {
     const { companyCode } = req.query;
+    console.log('[DEBUG] lead-counts request for companyCode:', companyCode);
     if (!companyCode) return res.status(400).json({ success: false, message: 'companyCode required' });
 
     const counts = await CallDetail.aggregate([
@@ -409,6 +410,7 @@ router.get('/lead-counts', async (req, res) => {
       if (c._id) countMap[c._id] = c.count;
     });
 
+    console.log(`[DEBUG] lead-counts found ${Object.keys(countMap).length} leads for ${companyCode}`);
     return res.status(200).json({ success: true, counts: countMap });
   } catch (err) {
     console.error('[lead-counts]', err);

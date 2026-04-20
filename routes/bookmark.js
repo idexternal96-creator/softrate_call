@@ -6,7 +6,7 @@ const router = express.Router();
 router.post('/', async (req, res) => {
   try {
     const { 
-      companyCode, employeePhone, contactNumber, contactName, 
+      companyCode, employeePhone, contactNumber, contactName, companyName,
       description, remark, brochuresSent, techMeet, meetingRemarks, 
       quotationSent, proposalSent, whatsappGrp, 
       callTimestamp, reminderDate 
@@ -23,6 +23,7 @@ router.post('/', async (req, res) => {
     const bookmark = await Bookmark.create({
       companyCode, employeePhone, contactNumber,
       contactName: contactName || '',
+      companyName: companyName || '',
       description: description || remark || '',
       remarks: initialRemarks,
       brochuresSent: !!brochuresSent,

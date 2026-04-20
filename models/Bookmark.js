@@ -5,6 +5,7 @@ const bookmarkSchema = new mongoose.Schema({
   employeePhone: { type: String, required: true, index: true },
   contactNumber: { type: String, required: true },
   contactName:   { type: String, default: '' },
+  companyName:   { type: String, default: '' },
   description:   { type: String, default: '' }, // Client requirement
   remarks:       [{ type: String }], // multiple descriptions history
   brochuresSent: { type: Boolean, default: false },
