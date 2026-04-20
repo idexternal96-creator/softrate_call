@@ -23,6 +23,7 @@ router.post('/', async (req, res) => {
     const bookmark = await Bookmark.create({
       companyCode, employeePhone, contactNumber,
       contactName: contactName || '',
+      description: description || remark || '',
       remarks: initialRemarks,
       brochuresSent: !!brochuresSent,
       techMeet: !!techMeet,
@@ -91,6 +92,7 @@ router.patch('/:id', async (req, res) => {
     } = req.body;
 
     const updateData = {};
+    if (description !== undefined) updateData.description = description;
     if (reminderDate !== undefined) updateData.reminderDate = reminderDate;
     if (brochuresSent !== undefined) updateData.brochuresSent = brochuresSent;
     if (techMeet !== undefined) updateData.techMeet = techMeet;
@@ -101,8 +103,8 @@ router.patch('/:id', async (req, res) => {
 
     const pushData = {};
     if (newRemark) pushData.remarks = newRemark;
-    else if (remark) pushData.remarks = remark;
-    else if (description) pushData.remarks = description;
+    // Note: We don't push 'description' or 'remark' to the array here 
+    // to keep them distinct from the top-level description update.
 
     const bookmark = await Bookmark.findByIdAndUpdate(
       req.params.id,
