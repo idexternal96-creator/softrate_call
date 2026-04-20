@@ -38,6 +38,21 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET — fetch all bookmarks for a company (Admin)
+router.get('/admin', async (req, res) => {
+  try {
+    const { companyCode } = req.query;
+    if (!companyCode) {
+      return res.status(400).json({ success: false, message: 'companyCode is required.' });
+    }
+    const bookmarks = await Bookmark.find({ companyCode }).sort({ createdAt: -1 });
+    return res.status(200).json({ success: true, bookmarks });
+  } catch (err) {
+    console.error('[get admin bookmarks]', err);
+    return res.status(500).json({ success: false, message: 'Server error fetching bookmarks.' });
+  }
+});
+
 // DELETE — remove a bookmark by ID
 router.delete('/:id', async (req, res) => {
   try {
