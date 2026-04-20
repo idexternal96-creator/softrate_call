@@ -5,14 +5,31 @@ const router = express.Router();
 // POST — create a bookmark
 router.post('/', async (req, res) => {
   try {
-    const { companyCode, employeePhone, contactNumber, contactName, description, callTimestamp, reminderDate } = req.body;
+    const { 
+      companyCode, employeePhone, contactNumber, contactName, 
+      description, remark, brochuresSent, techMeet, meetingRemarks, 
+      quotationSent, proposalSent, whatsappGrp, 
+      callTimestamp, reminderDate 
+    } = req.body;
+
     if (!companyCode || !employeePhone || !contactNumber) {
       return res.status(400).json({ success: false, message: 'companyCode, employeePhone and contactNumber are required.' });
     }
+
+    const initialRemarks = [];
+    if (description) initialRemarks.push(description);
+    if (remark) initialRemarks.push(remark);
+
     const bookmark = await Bookmark.create({
       companyCode, employeePhone, contactNumber,
       contactName: contactName || '',
-      description: description || '',
+      remarks: initialRemarks,
+      brochuresSent: !!brochuresSent,
+      techMeet: !!techMeet,
+      meetingRemarks: !!meetingRemarks,
+      quotationSent: !!quotationSent,
+      proposalSent: !!proposalSent,
+      whatsappGrp: !!whatsappGrp,
       callTimestamp: callTimestamp || 0,
       reminderDate: reminderDate || null,
     });
@@ -20,6 +37,21 @@ router.post('/', async (req, res) => {
   } catch (err) {
     console.error('[post bookmark]', err);
     return res.status(500).json({ success: false, message: 'Server error saving bookmark.' });
+  }
+});
+
+// GET — fetch all bookmarks for a company (Admin view)
+router.get('/admin', async (req, res) => {
+  try {
+    const { companyCode } = req.query;
+    if (!companyCode) {
+      return res.status(400).json({ success: false, message: 'companyCode is required.' });
+    }
+    const bookmarks = await Bookmark.find({ companyCode }).sort({ reminderDate: 1 });
+    return res.status(200).json({ success: true, bookmarks });
+  } catch (err) {
+    console.error('[get admin bookmarks]', err);
+    return res.status(500).json({ success: false, message: 'Server error fetching company bookmarks.' });
   }
 });
 
@@ -38,21 +70,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET — fetch all bookmarks for a company (Admin)
-router.get('/admin', async (req, res) => {
-  try {
-    const { companyCode } = req.query;
-    if (!companyCode) {
-      return res.status(400).json({ success: false, message: 'companyCode is required.' });
-    }
-    const bookmarks = await Bookmark.find({ companyCode }).sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, bookmarks });
-  } catch (err) {
-    console.error('[get admin bookmarks]', err);
-    return res.status(500).json({ success: false, message: 'Server error fetching bookmarks.' });
-  }
-});
-
 // DELETE — remove a bookmark by ID
 router.delete('/:id', async (req, res) => {
   try {
@@ -67,12 +84,35 @@ router.delete('/:id', async (req, res) => {
 // PATCH — update a bookmark by ID
 router.patch('/:id', async (req, res) => {
   try {
-    const { description, reminderDate } = req.body;
+    const { 
+      description, remark, newRemark, reminderDate,
+      brochuresSent, techMeet, meetingRemarks, 
+      quotationSent, proposalSent, whatsappGrp
+    } = req.body;
+
+    const updateData = {};
+    if (reminderDate !== undefined) updateData.reminderDate = reminderDate;
+    if (brochuresSent !== undefined) updateData.brochuresSent = brochuresSent;
+    if (techMeet !== undefined) updateData.techMeet = techMeet;
+    if (meetingRemarks !== undefined) updateData.meetingRemarks = meetingRemarks;
+    if (quotationSent !== undefined) updateData.quotationSent = quotationSent;
+    if (proposalSent !== undefined) updateData.proposalSent = proposalSent;
+    if (whatsappGrp !== undefined) updateData.whatsappGrp = whatsappGrp;
+
+    const pushData = {};
+    if (newRemark) pushData.remarks = newRemark;
+    else if (remark) pushData.remarks = remark;
+    else if (description) pushData.remarks = description;
+
     const bookmark = await Bookmark.findByIdAndUpdate(
       req.params.id,
-      { description, reminderDate },
+      { 
+        $set: updateData,
+        ...(Object.keys(pushData).length > 0 ? { $push: pushData } : {})
+      },
       { returnDocument: 'after' }
     );
+
     if (!bookmark) return res.status(404).json({ success: false, message: 'Bookmark not found.' });
     return res.status(200).json({ success: true, bookmark });
   } catch (err) {

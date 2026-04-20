@@ -5,7 +5,13 @@ const bookmarkSchema = new mongoose.Schema({
   employeePhone: { type: String, required: true, index: true },
   contactNumber: { type: String, required: true },
   contactName:   { type: String, default: '' },
-  description:   { type: String, default: '' },
+  remarks:       [{ type: String }], // multiple descriptions
+  brochuresSent: { type: Boolean, default: false },
+  techMeet:      { type: Boolean, default: false },
+  meetingRemarks:{ type: Boolean, default: false },
+  quotationSent: { type: Boolean, default: false },
+  proposalSent:  { type: Boolean, default: false },
+  whatsappGrp:   { type: Boolean, default: false },
   callTimestamp: { type: Number, default: 0 },  // original call timestamp
   reminderDate:  { type: Date, default: null }, // for follow-ups
   createdAt:     { type: Date, default: Date.now },
