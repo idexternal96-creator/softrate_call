@@ -93,7 +93,6 @@ router.patch('/:id', async (req, res) => {
 
     const updateData = {};
     if (description !== undefined) updateData.description = description;
-    if (remarks !== undefined) updateData.remarks = remarks; // Overwrite history if provided
     if (reminderDate !== undefined) updateData.reminderDate = reminderDate;
     if (brochuresSent !== undefined) updateData.brochuresSent = brochuresSent;
     if (techMeet !== undefined) updateData.techMeet = techMeet;
@@ -102,17 +101,30 @@ router.patch('/:id', async (req, res) => {
     if (proposalSent !== undefined) updateData.proposalSent = proposalSent;
     if (whatsappGrp !== undefined) updateData.whatsappGrp = whatsappGrp;
 
-    const pushData = {};
-    if (newRemark) pushData.remarks = newRemark;
-    // Note: We don't push 'description' or 'remark' to the array here 
-    // to keep them distinct from the top-level description update.
+    // Handle Remarks logic to avoid ConflictingUpdateOperators
+    let finalRemarks = remarks; // if remarks array was sent (e.g. from editing history)
+    
+    if (newRemark) {
+      if (finalRemarks) {
+        finalRemarks.push(newRemark);
+      } else {
+        // If remarks array wasn't sent, we need the current one to push to it 
+        // OR we can use $push if we aren't $setting. 
+        // But to be safe and consistent, let's handle it here.
+        const existing = await Bookmark.findById(req.params.id);
+        if (existing) {
+          finalRemarks = [...(existing.remarks || []), newRemark];
+        }
+      }
+    }
+
+    if (finalRemarks !== undefined) {
+      updateData.remarks = finalRemarks;
+    }
 
     const bookmark = await Bookmark.findByIdAndUpdate(
       req.params.id,
-      { 
-        $set: updateData,
-        ...(Object.keys(pushData).length > 0 ? { $push: pushData } : {})
-      },
+      { $set: updateData },
       { returnDocument: 'after' }
     );
 
