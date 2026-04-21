@@ -71,8 +71,11 @@ router.get('/admin', async (req, res) => {
       return res.status(400).json({ success: false, message: 'companyCode is required.' });
     }
     const query = { companyCode };
-    if (setLabel) query.setLabel = setLabel;
-    const leads = await Lead.find(query).sort({ sheetOrder: 1, createdAt: 1 }); // preserve sheet row order
+    let leads = [];
+    if (setLabel) {
+      query.setLabel = setLabel;
+      leads = await Lead.find(query).sort({ sheetOrder: 1, createdAt: 1 });
+    }
 
     // Also return distinct set labels for this company
     const sets = await Lead.distinct('setLabel', { companyCode });
