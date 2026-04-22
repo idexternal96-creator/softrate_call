@@ -166,4 +166,51 @@ router.patch('/:id', async (req, res) => {
   }
 });
 
+// POST — bulk create or update bookmarks
+router.post('/bulk', async (req, res) => {
+  try {
+    const { bookmarks } = req.body;
+    if (!bookmarks || !Array.isArray(bookmarks)) {
+      return res.status(400).json({ success: false, message: 'Bookmarks array is required.' });
+    }
+
+    const results = [];
+    for (const b of bookmarks) {
+      const { companyCode, contactNumber, employeePhone } = b;
+      if (!companyCode || !contactNumber || !employeePhone) continue;
+
+      if (b.reminderDate) {
+        const parsedDate = new Date(b.reminderDate);
+        if (isNaN(parsedDate.getTime())) {
+          b.remarks = b.remarks || [];
+          b.remarks.push(`Reminder note: ${b.reminderDate}`);
+          b.reminderDate = null;
+        }
+      }
+
+      let existing = await Bookmark.findOne({ companyCode, contactNumber });
+      if (existing) {
+        // Merge remarks and update other fields
+        const newRemarks = [...(existing.remarks || []), ...(b.remarks || [])];
+        const updateData = {
+          ...b,
+          remarks: Array.from(new Set(newRemarks)) // dedupe if needed
+        };
+        const updated = await Bookmark.findByIdAndUpdate(existing._id, { $set: updateData }, { returnDocument: 'after' });
+        results.push(updated);
+        eventBus.emitToEmployee(updated.companyCode, updated.employeePhone, { type: 'BOOKMARK_UPDATED', bookmark: updated });
+      } else {
+        const created = await Bookmark.create(b);
+        results.push(created);
+        eventBus.emitToEmployee(created.companyCode, created.employeePhone, { type: 'BOOKMARK_CREATED', bookmark: created });
+      }
+    }
+
+    return res.status(201).json({ success: true, count: results.length });
+  } catch (err) {
+    console.error('[bulk bookmarks]', err);
+    return res.status(500).json({ success: false, message: 'Server error during bulk bookmark import.' });
+  }
+});
+
 module.exports = router;
