@@ -1,40 +1,68 @@
 const express = require('express');
 const Bookmark = require('../models/Bookmark');
+const eventBus = require('../services/eventBus');
 const router = express.Router();
 
-// POST — create a bookmark
+// POST — create or update a bookmark (Follow-up)
 router.post('/', async (req, res) => {
   try {
     const { 
       companyCode, employeePhone, contactNumber, contactName, companyName,
-      description, remark, brochuresSent, techMeet, meetingRemarks, 
+      description, remark, newRemark, brochuresSent, techMeet, meetingRemarks, 
       quotationSent, proposalSent, whatsappGrp, 
-      callTimestamp, reminderDate 
+      reminderDate 
     } = req.body;
 
     if (!companyCode || !employeePhone || !contactNumber) {
       return res.status(400).json({ success: false, message: 'companyCode, employeePhone and contactNumber are required.' });
     }
 
-    const initialRemarks = [];
-    if (description) initialRemarks.push(description);
-    if (remark) initialRemarks.push(remark);
+    // Check if a bookmark already exists for this contact and employee
+    let bookmark = await Bookmark.findOne({ companyCode, contactNumber });
 
-    const bookmark = await Bookmark.create({
-      companyCode, employeePhone, contactNumber,
-      contactName: contactName || '',
-      companyName: companyName || '',
-      description: description || remark || '',
-      remarks: initialRemarks,
-      brochuresSent: !!brochuresSent,
-      techMeet: !!techMeet,
-      meetingRemarks: !!meetingRemarks,
-      quotationSent: !!quotationSent,
-      proposalSent: !!proposalSent,
-      whatsappGrp: !!whatsappGrp,
-      callTimestamp: callTimestamp || 0,
-      reminderDate: reminderDate || null,
-    });
+    const activeRemark = newRemark || remark;
+
+    if (bookmark) {
+      // Update existing
+      const updateData = {
+        description: description || bookmark.description,
+        brochuresSent: brochuresSent !== undefined ? !!brochuresSent : bookmark.brochuresSent,
+        techMeet: techMeet !== undefined ? !!techMeet : bookmark.techMeet,
+        meetingRemarks: meetingRemarks !== undefined ? !!meetingRemarks : bookmark.meetingRemarks,
+        quotationSent: quotationSent !== undefined ? !!quotationSent : bookmark.quotationSent,
+        proposalSent: proposalSent !== undefined ? !!proposalSent : bookmark.proposalSent,
+        whatsappGrp: whatsappGrp !== undefined ? !!whatsappGrp : bookmark.whatsappGrp,
+        reminderDate: reminderDate || bookmark.reminderDate,
+      };
+
+      if (activeRemark) {
+        updateData.remarks = [...(bookmark.remarks || []), activeRemark];
+      }
+
+      bookmark = await Bookmark.findByIdAndUpdate(bookmark._id, { $set: updateData }, { returnDocument: 'after' });
+      eventBus.emitToEmployee(bookmark.companyCode, bookmark.employeePhone, { type: 'BOOKMARK_UPDATED', bookmark });
+    } else {
+      // Create new
+      const initialRemarks = [];
+      if (activeRemark) initialRemarks.push(activeRemark);
+
+      bookmark = await Bookmark.create({
+        companyCode, employeePhone, contactNumber,
+        contactName: contactName || '',
+        companyName: companyName || '',
+        description: description || activeRemark || '',
+        remarks: initialRemarks,
+        brochuresSent: !!brochuresSent,
+        techMeet: !!techMeet,
+        meetingRemarks: !!meetingRemarks,
+        quotationSent: !!quotationSent,
+        proposalSent: !!proposalSent,
+        whatsappGrp: !!whatsappGrp,
+        reminderDate: reminderDate || null,
+      });
+      eventBus.emitToEmployee(bookmark.companyCode, bookmark.employeePhone, { type: 'BOOKMARK_CREATED', bookmark });
+    }
+
     return res.status(201).json({ success: true, bookmark });
   } catch (err) {
     console.error('[post bookmark]', err);
@@ -72,10 +100,12 @@ router.get('/', async (req, res) => {
   }
 });
 
-// DELETE — remove a bookmark by ID
 router.delete('/:id', async (req, res) => {
   try {
-    await Bookmark.findByIdAndDelete(req.params.id);
+    const bookmark = await Bookmark.findByIdAndDelete(req.params.id);
+    if (bookmark) {
+      eventBus.emitToEmployee(bookmark.companyCode, bookmark.employeePhone, { type: 'BOOKMARK_DELETED', id: req.params.id });
+    }
     return res.status(200).json({ success: true });
   } catch (err) {
     console.error('[delete bookmark]', err);
@@ -102,19 +132,17 @@ router.patch('/:id', async (req, res) => {
     if (proposalSent !== undefined) updateData.proposalSent = proposalSent;
     if (whatsappGrp !== undefined) updateData.whatsappGrp = whatsappGrp;
 
-    // Handle Remarks logic to avoid ConflictingUpdateOperators
-    let finalRemarks = remarks; // if remarks array was sent (e.g. from editing history)
+    // Handle Remarks logic
+    let finalRemarks = remarks; 
+    const activeNewRemark = newRemark || remark;
     
-    if (newRemark) {
+    if (activeNewRemark) {
       if (finalRemarks) {
-        finalRemarks.push(newRemark);
+        finalRemarks.push(activeNewRemark);
       } else {
-        // If remarks array wasn't sent, we need the current one to push to it 
-        // OR we can use $push if we aren't $setting. 
-        // But to be safe and consistent, let's handle it here.
         const existing = await Bookmark.findById(req.params.id);
         if (existing) {
-          finalRemarks = [...(existing.remarks || []), newRemark];
+          finalRemarks = [...(existing.remarks || []), activeNewRemark];
         }
       }
     }
@@ -130,6 +158,7 @@ router.patch('/:id', async (req, res) => {
     );
 
     if (!bookmark) return res.status(404).json({ success: false, message: 'Bookmark not found.' });
+    eventBus.emitToEmployee(bookmark.companyCode, bookmark.employeePhone, { type: 'BOOKMARK_UPDATED', bookmark });
     return res.status(200).json({ success: true, bookmark });
   } catch (err) {
     console.error('[patch bookmark]', err);

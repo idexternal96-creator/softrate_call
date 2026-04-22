@@ -1,5 +1,6 @@
 const express = require('express');
 const Lead = require('../models/Lead');
+const eventBus = require('../services/eventBus');
 const router = express.Router();
 
 // POST — create a single lead
@@ -16,6 +17,7 @@ router.post('/', async (req, res) => {
       status: status || 'New',
       setLabel: setLabel || '',
     });
+    eventBus.emitToEmployee(lead.companyCode, lead.assignedEmployeePhone, { type: 'LEAD_CREATED', lead });
     return res.status(201).json({ success: true, lead });
   } catch (err) {
     console.error('[post lead]', err);
@@ -35,6 +37,10 @@ router.post('/bulk', async (req, res) => {
     // Stamp sheetOrder if caller didn't send it (safety net)
     const stamped = leads.map((l, i) => ({ sheetOrder: i, ...l }));
     const createdLeads = await Lead.insertMany(stamped);
+    if (createdLeads.length > 0) {
+      // Broadcast to company so all employees sync the new leads
+      eventBus.emitToCompany(createdLeads[0].companyCode, { type: 'LEADS_REFRESH' });
+    }
     return res.status(201).json({ success: true, count: createdLeads.length });
   } catch (err) {
     console.error('[bulk post leads]', err);
@@ -95,6 +101,7 @@ router.post('/set/delete', async (req, res) => {
       return res.status(400).json({ success: false, message: 'companyCode, phone, and setLabel are required.' });
     }
     const result = await Lead.deleteMany({ companyCode, assignedEmployeePhone: phone, setLabel });
+    eventBus.emitToEmployee(companyCode, phone, { type: 'LEADS_REFRESH' });
     return res.status(200).json({ success: true, deleted: result.deletedCount });
   } catch (err) {
     console.error('[delete set leads]', err);
@@ -105,7 +112,10 @@ router.post('/set/delete', async (req, res) => {
 // DELETE — remove a single lead by ID
 router.delete('/:id', async (req, res) => {
   try {
-    await Lead.findByIdAndDelete(req.params.id);
+    const lead = await Lead.findByIdAndDelete(req.params.id);
+    if (lead) {
+      eventBus.emitToEmployee(lead.companyCode, lead.assignedEmployeePhone, { type: 'LEAD_DELETED', id: req.params.id });
+    }
     return res.status(200).json({ success: true });
   } catch (err) {
     console.error('[delete lead]', err);
@@ -122,6 +132,7 @@ router.patch('/:id/status', async (req, res) => {
     }
     const lead = await Lead.findByIdAndUpdate(req.params.id, { status }, { returnDocument: 'after' });
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found.' });
+    eventBus.emitToEmployee(lead.companyCode, lead.assignedEmployeePhone, { type: 'LEAD_UPDATED', lead });
     return res.status(200).json({ success: true, lead });
   } catch (err) {
     console.error('[update lead status]', err);

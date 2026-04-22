@@ -345,19 +345,22 @@ router.get('/details', async (req, res) => {
 // Returns array of { date, incoming, outgoing, missed, rejected } per day (or per hour for single day)
 router.get('/timeline', async (req, res) => {
   try {
-    const { companyCode } = req.query;
+    const { companyCode, phone } = req.query;
     if (!companyCode) return res.status(400).json({ success: false, message: 'companyCode required' });
     const [from, to] = resolveRange(req.query);
 
+    const baseQuery = { companyCode, date: { $gte: from, $lte: to } };
+    if (phone) baseQuery.phone = phone;
+
     if (from === to) {
       // Single day: group by hour from CallDetail
-      const calls = await CallDetail.find({ companyCode, date: from });
+      const detailQuery = { companyCode, date: from };
+      if (phone) detailQuery.phone = phone;
+      const calls = await CallDetail.find(detailQuery);
       const byHour = {};
       
-      // Initialize all 24 hours to ensure a continuous line
       for (let i = 0; i < 24; i++) {
         const hourStr = i.toString().padStart(2, '0');
-        // We use a pseudo-date string so the frontend can still use new Date()
         const pseudoDate = `${from}T${hourStr}:00:00`;
         byHour[i] = { date: pseudoDate, incoming: 0, outgoing: 0, missed: 0, rejected: 0, _isHourly: true };
       }
@@ -375,7 +378,7 @@ router.get('/timeline', async (req, res) => {
       return res.status(200).json({ success: true, timeline: Object.values(byHour) });
     } else {
       // Multiple days: group by date from CallLog
-      const docs = await CallLog.find({ companyCode, date: { $gte: from, $lte: to } }).sort({ date: 1 });
+      const docs = await CallLog.find(baseQuery).sort({ date: 1 });
       const byDate = {};
       for (const d of docs) {
         if (!byDate[d.date]) byDate[d.date] = { date: d.date, incoming: 0, outgoing: 0, missed: 0, rejected: 0 };
