@@ -491,4 +491,69 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
+/* ─────────────────────────────────────────────
+   GET /api/auth/company/:companyCode/settings
+   Returns company app-settings for the employee UI (lead statuses, connected call duration etc.)
+───────────────────────────────────────────── */
+router.get('/company/:companyCode/settings', async (req, res) => {
+  try {
+    const { companyCode } = req.params;
+    const user = await User.findOne({ companyCode }, 'breakHourLimit connectedCallDuration leadStatuses');
+    if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
+    return res.status(200).json({
+      success: true,
+      settings: {
+        breakHourLimit: user.breakHourLimit ?? 60,
+        connectedCallDuration: user.connectedCallDuration ?? 0,
+        leadStatuses: user.leadStatuses?.length ? user.leadStatuses : ['New', 'Contacted', 'Interested', 'Not Interested', 'Converted', 'Follow Up'],
+      }
+    });
+  } catch (err) {
+    console.error('[get settings]', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
+/* ─────────────────────────────────────────────
+   PUT /api/auth/company/:companyCode/settings
+   Admin updates breakHourLimit, connectedCallDuration, leadStatuses
+───────────────────────────────────────────── */
+router.put('/company/:companyCode/settings', async (req, res) => {
+  try {
+    const { companyCode } = req.params;
+    const { breakHourLimit, connectedCallDuration, leadStatuses } = req.body;
+
+    const update = {};
+    if (breakHourLimit !== undefined) update.breakHourLimit = Number(breakHourLimit);
+    if (connectedCallDuration !== undefined) update.connectedCallDuration = Number(connectedCallDuration);
+    if (leadStatuses !== undefined) {
+      if (!Array.isArray(leadStatuses) || leadStatuses.length === 0) {
+        return res.status(400).json({ success: false, message: 'leadStatuses must be a non-empty array.' });
+      }
+      update.leadStatuses = leadStatuses.map(s => s.trim()).filter(s => s !== '');
+    }
+
+    const user = await User.findOneAndUpdate(
+      { companyCode },
+      { $set: update },
+      { returnDocument: 'after' }
+    );
+    if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Settings updated.',
+      settings: {
+        breakHourLimit: user.breakHourLimit,
+        connectedCallDuration: user.connectedCallDuration,
+        leadStatuses: user.leadStatuses,
+      }
+    });
+  } catch (err) {
+    console.error('[update settings]', err);
+    return res.status(500).json({ success: false, message: 'Server error.' });
+  }
+});
+
 module.exports = router;
+

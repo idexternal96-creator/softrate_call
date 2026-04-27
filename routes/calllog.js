@@ -111,6 +111,9 @@ router.post('/sync', async (req, res) => {
       
       await CallDetail.bulkWrite(ops);
 
+      // Fetch company setting for connected call threshold
+      const connThreshold = company?.connectedCallDuration || 0;
+
       // 2. Recalculate daily aggregate from individual DETAIL records for total accuracy
       const allCallsToday = await CallDetail.find({ companyCode, phone, date });
       let inc = 0, out = 0, mis = 0, rej = 0, conn = 0;
@@ -120,15 +123,17 @@ router.post('/sync', async (req, res) => {
       for (const c of allCallsToday) {
         const type = c.callType.toLowerCase();
         const dur = c.duration || 0;
-        if (dur > 0) conn++;
+        const isConnected = connThreshold > 0 ? (dur >= connThreshold) : (dur > 0);
+        
+        if (isConnected) conn++;
 
         if (type === 'incoming') { 
           inc++; incDur += dur; totDur += dur;
-          if (dur > 0) incConn++;
+          if (isConnected) incConn++;
         }
         else if (type === 'outgoing') { 
           out++; outDur += dur; totDur += dur;
-          if (dur > 0) outConn++;
+          if (isConnected) outConn++;
         }
         else if (type === 'missed') { mis++; }
         else if (type === 'rejected') { rej++; }
@@ -252,6 +257,10 @@ router.get('/employees', async (req, res) => {
         });
       }
 
+      // Fetch company setting for connected call threshold
+      const company = await User.findOne({ companyCode });
+      const connThreshold = company?.connectedCallDuration || 0;
+
       // Aggregate filtered calls by employee
       const map = {};
       for (const c of calls) {
@@ -259,15 +268,17 @@ router.get('/employees', async (req, res) => {
         const e = map[c.phone];
         const type = c.callType.toLowerCase();
         const dur = c.duration || 0;
-        if (dur > 0) e.connected++;
+        const isConnected = connThreshold > 0 ? (dur >= connThreshold) : (dur > 0);
+        
+        if (isConnected) e.connected++;
         
         if (type === 'incoming') { 
           e.incoming++; e.incomingDuration += dur; e.totalDuration += dur;
-          if (dur > 0) e.incomingConnected++;
+          if (isConnected) e.incomingConnected++;
         }
         else if (type === 'outgoing') { 
           e.outgoing++; e.outgoingDuration += dur; e.totalDuration += dur;
-          if (dur > 0) e.outgoingConnected++;
+          if (isConnected) e.outgoingConnected++;
         }
         else if (type === 'missed') { e.missed++; }
         else if (type === 'rejected') { e.rejected++; }

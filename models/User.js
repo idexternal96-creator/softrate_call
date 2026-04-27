@@ -93,6 +93,19 @@ const userSchema = new mongoose.Schema(
     rmRequestTime: {
       type: Date
     },
+    // ── Company-level App Settings ──
+    breakHourLimit: {
+      type: Number,
+      default: 60, // minutes
+    },
+    connectedCallDuration: {
+      type: Number,
+      default: 0, // seconds — 0 means no filter
+    },
+    leadStatuses: {
+      type: [String],
+      default: ['New', 'Contacted', 'Interested', 'Not Interested', 'Converted', 'Follow Up'],
+    },
     subscriptionFrom: {
       type: Date,
     },
