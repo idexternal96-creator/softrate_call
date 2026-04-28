@@ -106,6 +106,14 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: ['New', 'Contacted', 'Interested', 'Not Interested', 'Converted', 'Follow Up'],
     },
+    interestedPageStatuses: {
+      type: [String],
+      default: ['Interested', 'Follow Up'],
+    },
+    dnpPageStatuses: {
+      type: [String],
+      default: ['Not Interested'],
+    },
     subscriptionFrom: {
       type: Date,
     },
