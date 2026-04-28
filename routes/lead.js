@@ -170,18 +170,24 @@ router.post('/:id/remarks', async (req, res) => {
     const lead = await Lead.findById(req.params.id);
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found.' });
 
-    // Ensure remarks is an array (handle legacy string data)
-    if (!Array.isArray(lead.remarks)) {
-      const oldRemarks = lead.remarks ? [lead.remarks] : [];
-      lead.remarks = [...oldRemarks, remark];
-    } else {
-      lead.remarks.push(remark);
+    // Handle legacy string data vs new array data
+    let currentRemarks = lead.remarks;
+    if (!Array.isArray(currentRemarks)) {
+      currentRemarks = (currentRemarks && typeof currentRemarks === 'string') ? [currentRemarks] : [];
     }
-
-    await lead.save();
     
-    eventBus.emitToEmployee(lead.companyCode, lead.assignedEmployeePhone, { type: 'LEAD_UPDATED', lead });
-    return res.status(200).json({ success: true, lead });
+    // Create new array with the new remark
+    const updatedRemarks = [...currentRemarks, remark];
+
+    // Use $set to overwrite the field completely, which avoids "must be an array" errors
+    const updatedLead = await Lead.findByIdAndUpdate(
+      req.params.id,
+      { $set: { remarks: updatedRemarks } },
+      { new: true }
+    );
+    
+    eventBus.emitToEmployee(updatedLead.companyCode, updatedLead.assignedEmployeePhone, { type: 'LEAD_UPDATED', lead: updatedLead });
+    return res.status(200).json({ success: true, lead: updatedLead });
   } catch (err) {
     console.error('[add lead remark]', err);
     return res.status(500).json({ success: false, message: 'Server error adding remark.' });
