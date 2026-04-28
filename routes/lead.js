@@ -194,4 +194,32 @@ router.post('/:id/remarks', async (req, res) => {
   }
 });
 
+// DELETE — remove a specific remark from a lead
+router.delete('/:id/remarks/:index', async (req, res) => {
+  try {
+    const { id, index } = req.params;
+    const lead = await Lead.findById(id);
+    if (!lead) return res.status(404).json({ success: false, message: 'Lead not found.' });
+
+    if (!Array.isArray(lead.remarks)) {
+      return res.status(400).json({ success: false, message: 'Remarks is not an array.' });
+    }
+
+    const updatedRemarks = [...lead.remarks];
+    updatedRemarks.splice(parseInt(index), 1);
+
+    const updatedLead = await Lead.findByIdAndUpdate(
+      id,
+      { $set: { remarks: updatedRemarks } },
+      { new: true }
+    );
+    
+    eventBus.emitToEmployee(updatedLead.companyCode, updatedLead.assignedEmployeePhone, { type: 'LEAD_UPDATED', lead: updatedLead });
+    return res.status(200).json({ success: true, lead: updatedLead });
+  } catch (err) {
+    console.error('[delete lead remark]', err);
+    return res.status(500).json({ success: false, message: 'Server error deleting remark.' });
+  }
+});
+
 module.exports = router;
