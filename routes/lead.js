@@ -97,7 +97,7 @@ router.get('/admin', async (req, res) => {
   }
 });
 
-// POST — remove all leads in a set for an employee (must come BEFORE /:id to avoid route conflict)
+// POST — remove all leads in a set for an employee
 router.post('/set/delete', async (req, res) => {
   try {
     const { companyCode, phone, setLabel } = req.body;
@@ -110,6 +110,23 @@ router.post('/set/delete', async (req, res) => {
   } catch (err) {
     console.error('[delete set leads]', err);
     return res.status(500).json({ success: false, message: 'Server error deleting set.' });
+  }
+});
+
+// POST — remove all leads in a set for the whole company
+router.post('/admin/delete-set', async (req, res) => {
+  try {
+    const { companyCode, setLabel } = req.body;
+    if (!companyCode || !setLabel) {
+      return res.status(400).json({ success: false, message: 'companyCode and setLabel are required.' });
+    }
+    const result = await Lead.deleteMany({ companyCode, setLabel });
+    // Refresh all employees in the company
+    eventBus.emitToCompany(companyCode, { type: 'LEADS_REFRESH' });
+    return res.status(200).json({ success: true, deleted: result.deletedCount });
+  } catch (err) {
+    console.error('[admin delete set leads]', err);
+    return res.status(500).json({ success: false, message: 'Server error deleting admin set.' });
   }
 });
 
