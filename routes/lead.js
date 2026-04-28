@@ -73,6 +73,21 @@ router.get('/employee', async (req, res) => {
   }
 });
 
+// GET — fetch only distinct set labels for an employee
+router.get('/employee/sets', async (req, res) => {
+  try {
+    const { companyCode, phone } = req.query;
+    if (!companyCode || !phone) {
+      return res.status(400).json({ success: false, message: 'companyCode and phone are required.' });
+    }
+    const sets = await Lead.distinct('setLabel', { companyCode, assignedEmployeePhone: phone });
+    return res.status(200).json({ success: true, sets: sets.filter(s => s && s.trim()) });
+  } catch (err) {
+    console.error('[get employee sets]', err);
+    return res.status(500).json({ success: false, message: 'Server error fetching sets.' });
+  }
+});
+
 // GET — fetch all leads for an admin's company (optionally filter by setLabel)
 router.get('/admin', async (req, res) => {
   try {
