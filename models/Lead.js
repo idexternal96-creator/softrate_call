@@ -9,6 +9,9 @@ const leadSchema = new mongoose.Schema({
   status:          { type: String, default: 'New' }, // e.g. New, Contacted, Converted
   setLabel:        { type: String, default: '' },     // e.g. "Jan 2026" or "1/1/2026-10/1/2026"
   companyDescription: { type: String, default: '' },  // Optional detailed info about company
+  mainDivisionDescription: { type: String, default: '' },
+  directorEmailAddress: { type: String, default: '' },
+  remarks:          { type: String, default: '' },
   sheetOrder:      { type: Number, default: 0 }       // original row index from uploaded sheet
 }, { timestamps: true });
 
