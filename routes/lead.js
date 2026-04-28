@@ -6,7 +6,7 @@ const router = express.Router();
 // POST — create a single lead
 router.post('/', async (req, res) => {
   try {
-    const { companyCode, assignedEmployeePhone, leadCompanyName, contactName, contactNumber, status, setLabel } = req.body;
+    const { companyCode, assignedEmployeePhone, leadCompanyName, contactName, contactNumber, status, setLabel, companyDescription } = req.body;
     if (!companyCode || !assignedEmployeePhone || !contactNumber || !leadCompanyName) {
       return res.status(400).json({ success: false, message: 'companyCode, assignedEmployeePhone, leadCompanyName, and contactNumber are required.' });
     }
@@ -16,6 +16,7 @@ router.post('/', async (req, res) => {
       contactNumber,
       status: status || 'New',
       setLabel: setLabel || '',
+      companyDescription: companyDescription || '',
     });
     eventBus.emitToEmployee(lead.companyCode, lead.assignedEmployeePhone, { type: 'LEAD_CREATED', lead });
     return res.status(201).json({ success: true, lead });
