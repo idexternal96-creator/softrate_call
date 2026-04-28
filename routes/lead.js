@@ -167,9 +167,18 @@ router.post('/:id/remarks', async (req, res) => {
     const { remark } = req.body;
     if (!remark) return res.status(400).json({ success: false, message: 'Remark is required.' });
     
-    // Using $push to add to the remarks array
-    const lead = await Lead.findByIdAndUpdate(req.params.id, { $push: { remarks: remark } }, { returnDocument: 'after' });
+    const lead = await Lead.findById(req.params.id);
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found.' });
+
+    // Ensure remarks is an array (handle legacy string data)
+    if (!Array.isArray(lead.remarks)) {
+      const oldRemarks = lead.remarks ? [lead.remarks] : [];
+      lead.remarks = [...oldRemarks, remark];
+    } else {
+      lead.remarks.push(remark);
+    }
+
+    await lead.save();
     
     eventBus.emitToEmployee(lead.companyCode, lead.assignedEmployeePhone, { type: 'LEAD_UPDATED', lead });
     return res.status(200).json({ success: true, lead });
