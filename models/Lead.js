@@ -11,7 +11,7 @@ const leadSchema = new mongoose.Schema({
   companyDescription: { type: String, default: '' },  // Optional detailed info about company
   mainDivisionDescription: { type: String, default: '' },
   directorEmailAddress: { type: String, default: '' },
-  remarks:          { type: String, default: '' },
+  remarks:          { type: [String], default: [] },
   sheetOrder:      { type: Number, default: 0 }       // original row index from uploaded sheet
 }, { timestamps: true });
 

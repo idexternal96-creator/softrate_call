@@ -19,7 +19,7 @@ router.post('/', async (req, res) => {
       companyDescription: companyDescription || '',
       mainDivisionDescription: mainDivisionDescription || '',
       directorEmailAddress: directorEmailAddress || '',
-      remarks: remarks || '',
+      remarks: remarks ? (Array.isArray(remarks) ? remarks : [remarks]) : [],
     });
     eventBus.emitToEmployee(lead.companyCode, lead.assignedEmployeePhone, { type: 'LEAD_CREATED', lead });
     return res.status(201).json({ success: true, lead });
@@ -158,6 +158,24 @@ router.patch('/:id/status', async (req, res) => {
   } catch (err) {
     console.error('[update lead status]', err);
     return res.status(500).json({ success: false, message: 'Server error updating lead status.' });
+  }
+});
+
+// POST — add a remark to a lead
+router.post('/:id/remarks', async (req, res) => {
+  try {
+    const { remark } = req.body;
+    if (!remark) return res.status(400).json({ success: false, message: 'Remark is required.' });
+    
+    // Using $push to add to the remarks array
+    const lead = await Lead.findByIdAndUpdate(req.params.id, { $push: { remarks: remark } }, { returnDocument: 'after' });
+    if (!lead) return res.status(404).json({ success: false, message: 'Lead not found.' });
+    
+    eventBus.emitToEmployee(lead.companyCode, lead.assignedEmployeePhone, { type: 'LEAD_UPDATED', lead });
+    return res.status(200).json({ success: true, lead });
+  } catch (err) {
+    console.error('[add lead remark]', err);
+    return res.status(500).json({ success: false, message: 'Server error adding remark.' });
   }
 });
 
