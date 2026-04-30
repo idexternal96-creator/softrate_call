@@ -12,6 +12,8 @@ const leadSchema = new mongoose.Schema({
   mainDivisionDescription: { type: String, default: '' },
   directorEmailAddress: { type: String, default: '' },
   remarks:          { type: [String], default: [] },
+  isStarred:       { type: Boolean, default: false },
+  isHearted:       { type: Boolean, default: false },
   sheetOrder:      { type: Number, default: 0 }       // original row index from uploaded sheet
 }, { timestamps: true });
 

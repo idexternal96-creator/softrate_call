@@ -176,6 +176,31 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
+// PATCH — update lead flags (isStarred, isHearted)
+router.patch('/:id/flags', async (req, res) => {
+  try {
+    const update = {};
+    if (req.body.isStarred !== undefined) update.isStarred = req.body.isStarred;
+    if (req.body.isHearted !== undefined) update.isHearted = req.body.isHearted;
+    
+    if (Object.keys(update).length === 0) {
+      return res.status(400).json({ success: false, message: 'No flags provided to update.' });
+    }
+
+    const lead = await Lead.findByIdAndUpdate(
+      req.params.id,
+      { $set: update },
+      { new: true }
+    );
+    if (!lead) return res.status(404).json({ success: false, message: 'Lead not found.' });
+    eventBus.emitToEmployee(lead.companyCode, lead.assignedEmployeePhone, { type: 'LEAD_UPDATED', lead });
+    return res.status(200).json({ success: true, lead });
+  } catch (err) {
+    console.error('[update lead flags]', err);
+    return res.status(500).json({ success: false, message: 'Server error updating lead flags.' });
+  }
+});
+
 // POST — add a remark to a lead
 router.post('/:id/remarks', async (req, res) => {
   try {
