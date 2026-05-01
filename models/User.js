@@ -104,7 +104,7 @@ const userSchema = new mongoose.Schema(
     },
     leadStatuses: {
       type: [String],
-      default: ['Interested', 'Not Connected', 'Converted', 'Follow Up', 'Not Interested'],
+      default: ['New', 'Interested', 'Not Connected', 'Converted', 'Follow Up', 'Not Interested'],
     },
     interestedPageStatuses: {
       type: [String],
