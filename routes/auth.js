@@ -498,16 +498,17 @@ router.post('/reset-password', async (req, res) => {
 router.get('/company/:companyCode/settings', async (req, res) => {
   try {
     const { companyCode } = req.params;
-    const user = await User.findOne({ companyCode }, 'breakHourLimit connectedCallDuration leadStatuses interestedPageStatuses dnpPageStatuses');
+    const user = await User.findOne({ companyCode }, 'breakHourLimit connectedCallDuration leadStatuses interestedPageStatuses dnpPageStatuses convertedPageStatuses');
     if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
     return res.status(200).json({
       success: true,
       settings: {
         breakHourLimit: user.breakHourLimit ?? 60,
         connectedCallDuration: user.connectedCallDuration ?? 0,
-        leadStatuses: user.leadStatuses?.length ? user.leadStatuses : ['New', 'Contacted', 'Interested', 'Not Interested', 'Converted', 'Follow Up'],
-        interestedPageStatuses: user.interestedPageStatuses ?? ['Interested', 'Follow Up'],
-        dnpPageStatuses: user.dnpPageStatuses ?? ['Not Interested'],
+        leadStatuses: user.leadStatuses || [],
+        interestedPageStatuses: user.interestedPageStatuses || [],
+        dnpPageStatuses: user.dnpPageStatuses || [],
+        convertedPageStatuses: user.convertedPageStatuses || [],
       }
     });
   } catch (err) {
@@ -523,22 +524,22 @@ router.get('/company/:companyCode/settings', async (req, res) => {
 router.put('/company/:companyCode/settings', async (req, res) => {
   try {
     const { companyCode } = req.params;
-    const { breakHourLimit, connectedCallDuration, leadStatuses, interestedPageStatuses, dnpPageStatuses } = req.body;
+    const { breakHourLimit, connectedCallDuration, leadStatuses, interestedPageStatuses, dnpPageStatuses, convertedPageStatuses } = req.body;
 
     const update = {};
     if (breakHourLimit !== undefined) update.breakHourLimit = Number(breakHourLimit);
     if (connectedCallDuration !== undefined) update.connectedCallDuration = Number(connectedCallDuration);
     if (leadStatuses !== undefined) {
-      if (!Array.isArray(leadStatuses) || leadStatuses.length === 0) {
-        return res.status(400).json({ success: false, message: 'leadStatuses must be a non-empty array.' });
-      }
-      update.leadStatuses = leadStatuses.map(s => s.trim()).filter(s => s !== '');
+      update.leadStatuses = Array.isArray(leadStatuses) ? leadStatuses.map(s => s.trim()).filter(s => s !== '') : [];
     }
     if (interestedPageStatuses !== undefined) {
       update.interestedPageStatuses = Array.isArray(interestedPageStatuses) ? interestedPageStatuses : [];
     }
     if (dnpPageStatuses !== undefined) {
       update.dnpPageStatuses = Array.isArray(dnpPageStatuses) ? dnpPageStatuses : [];
+    }
+    if (convertedPageStatuses !== undefined) {
+      update.convertedPageStatuses = Array.isArray(convertedPageStatuses) ? convertedPageStatuses : [];
     }
 
     const user = await User.findOneAndUpdate(
@@ -557,6 +558,7 @@ router.put('/company/:companyCode/settings', async (req, res) => {
         leadStatuses: user.leadStatuses,
         interestedPageStatuses: user.interestedPageStatuses,
         dnpPageStatuses: user.dnpPageStatuses,
+        convertedPageStatuses: user.convertedPageStatuses,
       }
     });
   } catch (err) {

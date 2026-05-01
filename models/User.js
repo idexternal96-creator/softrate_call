@@ -104,15 +104,19 @@ const userSchema = new mongoose.Schema(
     },
     leadStatuses: {
       type: [String],
-      default: ['New', 'Contacted', 'Interested', 'Not Interested', 'Converted', 'Follow Up'],
+      default: [],
     },
     interestedPageStatuses: {
       type: [String],
-      default: ['Interested', 'Follow Up'],
+      default: [],
     },
     dnpPageStatuses: {
       type: [String],
-      default: ['Not Interested'],
+      default: [],
+    },
+    convertedPageStatuses: {
+      type: [String],
+      default: [],
     },
     subscriptionFrom: {
       type: Date,

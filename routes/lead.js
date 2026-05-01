@@ -176,7 +176,7 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
-// PATCH — update lead flags (isStarred, isHearted)
+// PATCH — update lead flags (isStarred, isFavourite)
 router.patch('/:id/flags', async (req, res) => {
   try {
     const update = {};
