@@ -125,6 +125,10 @@ const userSchema = new mongoose.Schema(
     invoiceLogo: {
       type: String, // Base64 or URL
     },
+    showCompanyNameOnInvoice: {
+      type: Boolean,
+      default: true,
+    },
     gstNumber: {
       type: String,
       trim: true,
@@ -134,7 +138,7 @@ const userSchema = new mongoose.Schema(
       default: 18,
     },
     bankDetails: {
-      bankName: { type: String, default: 'DBS Bank (India)' },
+      bankName: { type: String, trim: true },
       accountNumber: { type: String, trim: true },
       ifscCode: { type: String, trim: true },
       branchName: { type: String, trim: true },
