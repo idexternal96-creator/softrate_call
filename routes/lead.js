@@ -181,7 +181,7 @@ router.patch('/:id/flags', async (req, res) => {
   try {
     const update = {};
     if (req.body.isStarred !== undefined) update.isStarred = req.body.isStarred;
-    if (req.body.isHearted !== undefined) update.isHearted = req.body.isHearted;
+    if (req.body.isFavourite !== undefined) update.isFavourite = req.body.isFavourite;
     
     if (Object.keys(update).length === 0) {
       return res.status(400).json({ success: false, message: 'No flags provided to update.' });
