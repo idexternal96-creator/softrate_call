@@ -498,7 +498,7 @@ router.post('/reset-password', async (req, res) => {
 router.get('/company/:companyCode/settings', async (req, res) => {
   try {
     const { companyCode } = req.params;
-    const user = await User.findOne({ companyCode }, 'breakHourLimit connectedCallDuration leadStatuses interestedPageStatuses dnpPageStatuses convertedPageStatuses');
+    const user = await User.findOne({ companyCode }, 'companyName breakHourLimit connectedCallDuration leadStatuses interestedPageStatuses dnpPageStatuses convertedPageStatuses invoiceLogo gstNumber gstPercentage bankDetails contactDetails products');
     if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
     const leadStatuses = user.leadStatuses || [];
     const valid = new Set(leadStatuses);
@@ -513,6 +513,13 @@ router.get('/company/:companyCode/settings', async (req, res) => {
         interestedPageStatuses: filterValid(user.interestedPageStatuses),
         dnpPageStatuses: filterValid(user.dnpPageStatuses),
         convertedPageStatuses: filterValid(user.convertedPageStatuses),
+        companyName: user.companyName,
+        invoiceLogo: user.invoiceLogo,
+        gstNumber: user.gstNumber,
+        gstPercentage: user.gstPercentage ?? 18,
+        bankDetails: user.bankDetails || { bankName: 'DBS Bank (India)', accountNumber: '', ifscCode: '', branchName: '' },
+        contactDetails: user.contactDetails || { website: '', email: '', phone: '' },
+        products: user.products || []
       }
     });
   } catch (err) {
@@ -528,7 +535,10 @@ router.get('/company/:companyCode/settings', async (req, res) => {
 router.put('/company/:companyCode/settings', async (req, res) => {
   try {
     const { companyCode } = req.params;
-    const { breakHourLimit, connectedCallDuration, leadStatuses, interestedPageStatuses, dnpPageStatuses, convertedPageStatuses } = req.body;
+    const { 
+      breakHourLimit, connectedCallDuration, leadStatuses, interestedPageStatuses, dnpPageStatuses, convertedPageStatuses,
+      invoiceLogo, gstNumber, gstPercentage, bankDetails, contactDetails, products 
+    } = req.body;
 
     const update = {};
     if (breakHourLimit !== undefined) update.breakHourLimit = Number(breakHourLimit);
@@ -545,6 +555,13 @@ router.put('/company/:companyCode/settings', async (req, res) => {
     if (convertedPageStatuses !== undefined) {
       update.convertedPageStatuses = Array.isArray(convertedPageStatuses) ? convertedPageStatuses : [];
     }
+
+    if (invoiceLogo !== undefined) update.invoiceLogo = invoiceLogo;
+    if (gstNumber !== undefined) update.gstNumber = gstNumber;
+    if (gstPercentage !== undefined) update.gstPercentage = Number(gstPercentage);
+    if (bankDetails !== undefined) update.bankDetails = bankDetails;
+    if (contactDetails !== undefined) update.contactDetails = contactDetails;
+    if (products !== undefined) update.products = Array.isArray(products) ? products : [];
 
     // Defensive check: Ensure page-specific statuses exist in leadStatuses
     const currentUser = await User.findOne({ companyCode }, 'leadStatuses');
@@ -571,6 +588,12 @@ router.put('/company/:companyCode/settings', async (req, res) => {
         interestedPageStatuses: user.interestedPageStatuses,
         dnpPageStatuses: user.dnpPageStatuses,
         convertedPageStatuses: user.convertedPageStatuses,
+        invoiceLogo: user.invoiceLogo,
+        gstNumber: user.gstNumber,
+        gstPercentage: user.gstPercentage,
+        bankDetails: user.bankDetails,
+        contactDetails: user.contactDetails,
+        products: user.products
       }
     });
   } catch (err) {

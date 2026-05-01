@@ -118,17 +118,42 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
-    subscriptionFrom: {
-      type: Date,
-    },
     subscriptionTo: {
       type: Date,
     },
+    // ── Invoice Generation Settings ──
+    invoiceLogo: {
+      type: String, // Base64 or URL
+    },
+    gstNumber: {
+      type: String,
+      trim: true,
+    },
+    gstPercentage: {
+      type: Number,
+      default: 18,
+    },
+    bankDetails: {
+      bankName: { type: String, default: 'DBS Bank (India)' },
+      accountNumber: { type: String, trim: true },
+      ifscCode: { type: String, trim: true },
+      branchName: { type: String, trim: true },
+    },
+    contactDetails: {
+      website: { type: String, trim: true },
+      email: { type: String, trim: true },
+      phone: { type: String, trim: true },
+    },
+    products: [{
+      name: { type: String, required: true },
+      minPrice: { type: Number, required: true },
+      maxPrice: { type: Number, required: true },
+    }],
     resetPasswordToken: String,
     resetPasswordExpires: Date,
   },
   {
-    timestamps: true, // adds createdAt & updatedAt automatically
+    timestamps: true, 
   }
 );
 
