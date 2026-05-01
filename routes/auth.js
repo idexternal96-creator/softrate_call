@@ -498,7 +498,7 @@ router.post('/reset-password', async (req, res) => {
 router.get('/company/:companyCode/settings', async (req, res) => {
   try {
     const { companyCode } = req.params;
-    const user = await User.findOne({ companyCode }, 'companyName breakHourLimit connectedCallDuration leadStatuses interestedPageStatuses dnpPageStatuses convertedPageStatuses invoiceLogo gstNumber gstPercentage bankDetails contactDetails products');
+    const user = await User.findOne({ companyCode }, 'companyName breakHourLimit connectedCallDuration leadStatuses interestedPageStatuses dnpPageStatuses convertedPageStatuses invoiceLogo showCompanyNameOnInvoice gstNumber gstPercentage bankDetails contactDetails products');
     if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
     const leadStatuses = user.leadStatuses || [];
     const valid = new Set(leadStatuses);
@@ -515,9 +515,10 @@ router.get('/company/:companyCode/settings', async (req, res) => {
         convertedPageStatuses: filterValid(user.convertedPageStatuses),
         companyName: user.companyName,
         invoiceLogo: user.invoiceLogo,
+        showCompanyNameOnInvoice: user.showCompanyNameOnInvoice ?? true,
         gstNumber: user.gstNumber,
         gstPercentage: user.gstPercentage ?? 18,
-        bankDetails: user.bankDetails || { bankName: 'DBS Bank (India)', accountNumber: '', ifscCode: '', branchName: '' },
+        bankDetails: user.bankDetails || { bankName: '', accountNumber: '', ifscCode: '', branchName: '' },
         contactDetails: user.contactDetails || { website: '', email: '', phone: '' },
         products: user.products || []
       }
@@ -537,7 +538,7 @@ router.put('/company/:companyCode/settings', async (req, res) => {
     const { companyCode } = req.params;
     const { 
       breakHourLimit, connectedCallDuration, leadStatuses, interestedPageStatuses, dnpPageStatuses, convertedPageStatuses,
-      invoiceLogo, gstNumber, gstPercentage, bankDetails, contactDetails, products 
+      invoiceLogo, showCompanyNameOnInvoice, gstNumber, gstPercentage, bankDetails, contactDetails, products 
     } = req.body;
 
     const update = {};
@@ -557,6 +558,7 @@ router.put('/company/:companyCode/settings', async (req, res) => {
     }
 
     if (invoiceLogo !== undefined) update.invoiceLogo = invoiceLogo;
+    if (showCompanyNameOnInvoice !== undefined) update.showCompanyNameOnInvoice = !!showCompanyNameOnInvoice;
     if (gstNumber !== undefined) update.gstNumber = gstNumber;
     if (gstPercentage !== undefined) update.gstPercentage = Number(gstPercentage);
     if (bankDetails !== undefined) update.bankDetails = bankDetails;
@@ -589,6 +591,7 @@ router.put('/company/:companyCode/settings', async (req, res) => {
         dnpPageStatuses: user.dnpPageStatuses,
         convertedPageStatuses: user.convertedPageStatuses,
         invoiceLogo: user.invoiceLogo,
+        showCompanyNameOnInvoice: user.showCompanyNameOnInvoice,
         gstNumber: user.gstNumber,
         gstPercentage: user.gstPercentage,
         bankDetails: user.bankDetails,
