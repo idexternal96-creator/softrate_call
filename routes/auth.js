@@ -500,15 +500,19 @@ router.get('/company/:companyCode/settings', async (req, res) => {
     const { companyCode } = req.params;
     const user = await User.findOne({ companyCode }, 'breakHourLimit connectedCallDuration leadStatuses interestedPageStatuses dnpPageStatuses convertedPageStatuses');
     if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
+    const leadStatuses = user.leadStatuses || [];
+    const valid = new Set(leadStatuses);
+    const filterValid = (arr) => (arr || []).filter(s => valid.has(s));
+
     return res.status(200).json({
       success: true,
       settings: {
         breakHourLimit: user.breakHourLimit ?? 60,
         connectedCallDuration: user.connectedCallDuration ?? 0,
-        leadStatuses: user.leadStatuses || [],
-        interestedPageStatuses: user.interestedPageStatuses || [],
-        dnpPageStatuses: user.dnpPageStatuses || [],
-        convertedPageStatuses: user.convertedPageStatuses || [],
+        leadStatuses,
+        interestedPageStatuses: filterValid(user.interestedPageStatuses),
+        dnpPageStatuses: filterValid(user.dnpPageStatuses),
+        convertedPageStatuses: filterValid(user.convertedPageStatuses),
       }
     });
   } catch (err) {
@@ -541,6 +545,14 @@ router.put('/company/:companyCode/settings', async (req, res) => {
     if (convertedPageStatuses !== undefined) {
       update.convertedPageStatuses = Array.isArray(convertedPageStatuses) ? convertedPageStatuses : [];
     }
+
+    // Defensive check: Ensure page-specific statuses exist in leadStatuses
+    const currentUser = await User.findOne({ companyCode }, 'leadStatuses');
+    const validStatuses = new Set(update.leadStatuses !== undefined ? update.leadStatuses : (currentUser?.leadStatuses || []));
+    
+    if (update.interestedPageStatuses) update.interestedPageStatuses = update.interestedPageStatuses.filter(s => validStatuses.has(s));
+    if (update.dnpPageStatuses) update.dnpPageStatuses = update.dnpPageStatuses.filter(s => validStatuses.has(s));
+    if (update.convertedPageStatuses) update.convertedPageStatuses = update.convertedPageStatuses.filter(s => validStatuses.has(s));
 
     const user = await User.findOneAndUpdate(
       { companyCode },
