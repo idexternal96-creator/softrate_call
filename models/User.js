@@ -100,23 +100,23 @@ const userSchema = new mongoose.Schema(
     },
     connectedCallDuration: {
       type: Number,
-      default: 0, // seconds — 0 means no filter
+      default: 30, // seconds — professional baseline
     },
     leadStatuses: {
       type: [String],
-      default: [],
+      default: ['Interested', 'Not Connected', 'Converted', 'Follow Up', 'Not Interested'],
     },
     interestedPageStatuses: {
       type: [String],
-      default: [],
+      default: ['Interested', 'Follow Up'],
     },
     dnpPageStatuses: {
       type: [String],
-      default: [],
+      default: ['Not Connected'],
     },
     convertedPageStatuses: {
       type: [String],
-      default: [],
+      default: ['Converted'],
     },
     subscriptionTo: {
       type: Date,
