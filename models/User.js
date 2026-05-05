@@ -153,6 +153,7 @@ const userSchema = new mongoose.Schema(
       minPrice: { type: Number, required: true },
       maxPrice: { type: Number, required: true },
     }],
+    productRemarks: [String],
     resetPasswordToken: String,
     resetPasswordExpires: Date,
   },

@@ -180,22 +180,4 @@ router.get('/payments/:companyCode', protectAdmin, async (req, res) => {
   }
 });
 
-// Update Company Tags
-router.patch('/update-tags/:id', protectAdmin, async (req, res) => {
-  try {
-    const { tags } = req.body;
-    const company = await User.findByIdAndUpdate(
-      req.params.id,
-      { tags: tags },
-      { new: true }
-    );
-    if (!company) return res.status(404).json({ success: false, message: 'Company not found' });
-    
-    res.json({ success: true, message: 'Tags updated successfully', company });
-  } catch (err) {
-    console.error('[update tags]:', err);
-    res.status(500).json({ success: false, message: 'Server error: ' + err.message });
-  }
-});
-
 module.exports = router;

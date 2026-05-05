@@ -498,7 +498,7 @@ router.post('/reset-password', async (req, res) => {
 router.get('/company/:companyCode/settings', async (req, res) => {
   try {
     const { companyCode } = req.params;
-    const user = await User.findOne({ companyCode }, 'companyName breakHourLimit connectedCallDuration leadStatuses interestedPageStatuses dnpPageStatuses convertedPageStatuses invoiceLogo showCompanyNameOnInvoice gstNumber gstPercentage bankDetails contactDetails products');
+    const user = await User.findOne({ companyCode }, 'companyName breakHourLimit connectedCallDuration leadStatuses interestedPageStatuses dnpPageStatuses convertedPageStatuses invoiceLogo showCompanyNameOnInvoice gstNumber gstPercentage bankDetails contactDetails products productRemarks');
     if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
     const leadStatuses = user.leadStatuses || [];
     const valid = new Set(leadStatuses);
@@ -520,7 +520,8 @@ router.get('/company/:companyCode/settings', async (req, res) => {
         gstPercentage: user.gstPercentage ?? 18,
         bankDetails: user.bankDetails || { bankName: '', accountNumber: '', ifscCode: '', branchName: '' },
         contactDetails: user.contactDetails || { website: '', email: '', phone: '' },
-        products: user.products || []
+        products: user.products || [],
+        productRemarks: user.productRemarks || []
       }
     });
   } catch (err) {
@@ -538,7 +539,7 @@ router.put('/company/:companyCode/settings', async (req, res) => {
     const { companyCode } = req.params;
     const { 
       breakHourLimit, connectedCallDuration, leadStatuses, interestedPageStatuses, dnpPageStatuses, convertedPageStatuses,
-      invoiceLogo, showCompanyNameOnInvoice, gstNumber, gstPercentage, bankDetails, contactDetails, products 
+      invoiceLogo, showCompanyNameOnInvoice, gstNumber, gstPercentage, bankDetails, contactDetails, products, productRemarks 
     } = req.body;
 
     const update = {};
@@ -564,9 +565,14 @@ router.put('/company/:companyCode/settings', async (req, res) => {
     if (bankDetails !== undefined) update.bankDetails = bankDetails;
     if (contactDetails !== undefined) update.contactDetails = contactDetails;
     if (products !== undefined) update.products = Array.isArray(products) ? products : [];
+    
+    // Explicitly handle productRemarks to ensure they are saved
+    if (productRemarks !== undefined) {
+      update.productRemarks = Array.isArray(productRemarks) ? productRemarks : [];
+    }
 
     // Defensive check: Ensure page-specific statuses exist in leadStatuses
-    const currentUser = await User.findOne({ companyCode }, 'leadStatuses');
+    const currentUser = await User.findOne({ companyCode }, 'leadStatuses productRemarks');
     const validStatuses = new Set(update.leadStatuses !== undefined ? update.leadStatuses : (currentUser?.leadStatuses || []));
     
     if (update.interestedPageStatuses) update.interestedPageStatuses = update.interestedPageStatuses.filter(s => validStatuses.has(s));
@@ -576,8 +582,9 @@ router.put('/company/:companyCode/settings', async (req, res) => {
     const user = await User.findOneAndUpdate(
       { companyCode },
       { $set: update },
-      { returnDocument: 'after' }
+      { new: true, runValidators: true }
     );
+    
     if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
 
     return res.status(200).json({
@@ -596,7 +603,8 @@ router.put('/company/:companyCode/settings', async (req, res) => {
         gstPercentage: user.gstPercentage,
         bankDetails: user.bankDetails,
         contactDetails: user.contactDetails,
-        products: user.products
+        products: user.products,
+        productRemarks: user.productRemarks
       }
     });
   } catch (err) {
