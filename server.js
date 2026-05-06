@@ -87,6 +87,9 @@ app.use('/api/leads', require('./routes/lead'));
 // Break log routes
 app.use('/api/breaklog', require('./routes/breaklog'));
 
+// History routes
+app.use('/api/history', require('./routes/history'));
+
 // ── Real-time SSE events endpoint ────────────────────────────
 const eventBus = require('./services/eventBus');
 

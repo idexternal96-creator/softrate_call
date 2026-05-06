@@ -1,6 +1,7 @@
 const express = require('express');
 const Bookmark = require('../models/Bookmark');
 const eventBus = require('../services/eventBus');
+const { logChange } = require('../services/historyService');
 const router = express.Router();
 
 // POST — create or update a bookmark (Follow-up)
@@ -41,6 +42,16 @@ router.post('/', async (req, res) => {
 
       bookmark = await Bookmark.findByIdAndUpdate(bookmark._id, { $set: updateData }, { returnDocument: 'after' });
       eventBus.emitToEmployee(bookmark.companyCode, bookmark.employeePhone, { type: 'BOOKMARK_UPDATED', bookmark });
+
+      // Log History
+      await logChange({
+        companyCode: bookmark.companyCode,
+        contactNumber: bookmark.contactNumber,
+        companyName: bookmark.companyName,
+        action: 'Follow-up Updated',
+        details: activeRemark ? `New Remark: ${activeRemark}` : 'Follow-up details changed',
+        changedBy: bookmark.employeePhone
+      });
     } else {
       // Create new
       const initialRemarks = [];
@@ -61,6 +72,17 @@ router.post('/', async (req, res) => {
         reminderDate: reminderDate || null,
       });
       eventBus.emitToEmployee(bookmark.companyCode, bookmark.employeePhone, { type: 'BOOKMARK_CREATED', bookmark });
+
+      // Log History
+      await logChange({
+        companyCode: bookmark.companyCode,
+        contactNumber: bookmark.contactNumber,
+        contactName: bookmark.contactName,
+        companyName: bookmark.companyName,
+        action: 'Bookmarked',
+        details: activeRemark ? `Initial Remark: ${activeRemark}` : 'Added to follow-ups',
+        changedBy: bookmark.employeePhone
+      });
     }
 
     return res.status(201).json({ success: true, bookmark });
@@ -159,6 +181,18 @@ router.patch('/:id', async (req, res) => {
 
     if (!bookmark) return res.status(404).json({ success: false, message: 'Bookmark not found.' });
     eventBus.emitToEmployee(bookmark.companyCode, bookmark.employeePhone, { type: 'BOOKMARK_UPDATED', bookmark });
+
+    // Log History
+    await logChange({
+      companyCode: bookmark.companyCode,
+      contactNumber: bookmark.contactNumber,
+      contactName: bookmark.contactName,
+      companyName: bookmark.companyName,
+      action: 'Follow-up Updated',
+      details: activeNewRemark ? `New Remark: ${activeNewRemark}` : 'Follow-up details patched',
+      changedBy: bookmark.employeePhone
+    });
+
     return res.status(200).json({ success: true, bookmark });
   } catch (err) {
     console.error('[patch bookmark]', err);
@@ -203,6 +237,16 @@ router.post('/bulk', async (req, res) => {
         const created = await Bookmark.create(b);
         results.push(created);
         eventBus.emitToEmployee(created.companyCode, created.employeePhone, { type: 'BOOKMARK_CREATED', bookmark: created });
+
+        // Log History
+        logChange({
+          companyCode: created.companyCode,
+          contactNumber: created.contactNumber,
+          contactName: created.contactName,
+          companyName: created.companyName,
+          action: 'Bookmarked (Bulk)',
+          changedBy: created.employeePhone
+        }).catch(err => console.error('[history bookmark bulk error]:', err));
       }
     }
 

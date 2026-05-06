@@ -1,6 +1,7 @@
 const express = require('express');
 const Lead = require('../models/Lead');
 const eventBus = require('../services/eventBus');
+const { logChange } = require('../services/historyService');
 const router = express.Router();
 
 // POST — create a single lead
@@ -22,6 +23,18 @@ router.post('/', async (req, res) => {
       remarks: remarks ? (Array.isArray(remarks) ? remarks : [remarks]) : [],
     });
     eventBus.emitToEmployee(lead.companyCode, lead.assignedEmployeePhone, { type: 'LEAD_CREATED', lead });
+    
+    // Log History
+    await logChange({
+      companyCode: lead.companyCode,
+      contactNumber: lead.contactNumber,
+      contactName: lead.contactName,
+      companyName: lead.leadCompanyName,
+      action: 'Lead Created',
+      newValue: lead.status,
+      changedBy: lead.assignedEmployeePhone
+    });
+
     return res.status(201).json({ success: true, lead });
   } catch (err) {
     console.error('[post lead]', err);
@@ -44,6 +57,19 @@ router.post('/bulk', async (req, res) => {
     if (createdLeads.length > 0) {
       // Broadcast to company so all employees sync the new leads
       eventBus.emitToCompany(createdLeads[0].companyCode, { type: 'LEADS_REFRESH' });
+
+      // Log History for each lead (Non-blocking)
+      createdLeads.forEach(l => {
+        logChange({
+          companyCode: l.companyCode,
+          contactNumber: l.contactNumber,
+          contactName: l.contactName,
+          companyName: l.leadCompanyName,
+          action: 'Lead Created (Bulk)',
+          newValue: l.status,
+          changedBy: l.assignedEmployeePhone || 'Admin'
+        }).catch(err => console.error('[history bulk error]:', err));
+      });
     }
     return res.status(201).json({ success: true, count: createdLeads.length });
   } catch (err) {
@@ -168,9 +194,26 @@ router.patch('/:id/status', async (req, res) => {
     if (!status) {
       return res.status(400).json({ success: false, message: 'Status is required.' });
     }
+    const oldLead = await Lead.findById(req.params.id);
+    if (!oldLead) return res.status(404).json({ success: false, message: 'Lead not found.' });
+    const oldStatus = oldLead.status;
+
     const lead = await Lead.findByIdAndUpdate(req.params.id, { status }, { returnDocument: 'after' });
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found.' });
     eventBus.emitToEmployee(lead.companyCode, lead.assignedEmployeePhone, { type: 'LEAD_UPDATED', lead });
+
+    // Log History
+    await logChange({
+      companyCode: lead.companyCode,
+      contactNumber: lead.contactNumber,
+      contactName: lead.contactName,
+      companyName: lead.leadCompanyName,
+      action: 'Status Change',
+      oldValue: oldStatus,
+      newValue: status,
+      changedBy: lead.assignedEmployeePhone
+    });
+
     return res.status(200).json({ success: true, lead });
   } catch (err) {
     console.error('[update lead status]', err);
@@ -178,7 +221,6 @@ router.patch('/:id/status', async (req, res) => {
   }
 });
 
-// PATCH — update lead flags (isStarred, isFavourite)
 router.patch('/:id/flags', async (req, res) => {
   try {
     const update = {};
@@ -189,6 +231,9 @@ router.patch('/:id/flags', async (req, res) => {
       return res.status(400).json({ success: false, message: 'No flags provided to update.' });
     }
 
+    const oldLead = await Lead.findById(req.params.id);
+    if (!oldLead) return res.status(404).json({ success: false, message: 'Lead not found.' });
+
     const lead = await Lead.findByIdAndUpdate(
       req.params.id,
       { $set: update },
@@ -196,6 +241,29 @@ router.patch('/:id/flags', async (req, res) => {
     );
     if (!lead) return res.status(404).json({ success: false, message: 'Lead not found.' });
     eventBus.emitToEmployee(lead.companyCode, lead.assignedEmployeePhone, { type: 'LEAD_UPDATED', lead });
+
+    // Log History
+    if (update.isStarred !== undefined && update.isStarred !== oldLead.isStarred) {
+      await logChange({
+        companyCode: lead.companyCode,
+        contactNumber: lead.contactNumber,
+        contactName: lead.contactName,
+        companyName: lead.leadCompanyName,
+        action: lead.isStarred ? 'Starred' : 'Unstarred',
+        changedBy: lead.assignedEmployeePhone
+      });
+    }
+    if (update.isFavourite !== undefined && update.isFavourite !== oldLead.isFavourite) {
+      await logChange({
+        companyCode: lead.companyCode,
+        contactNumber: lead.contactNumber,
+        contactName: lead.contactName,
+        companyName: lead.leadCompanyName,
+        action: lead.isFavourite ? 'Favourited' : 'Unfavourited',
+        changedBy: lead.assignedEmployeePhone
+      });
+    }
+
     return res.status(200).json({ success: true, lead });
   } catch (err) {
     console.error('[update lead flags]', err);
@@ -229,6 +297,19 @@ router.post('/:id/remarks', async (req, res) => {
     );
     
     eventBus.emitToEmployee(updatedLead.companyCode, updatedLead.assignedEmployeePhone, { type: 'LEAD_UPDATED', lead: updatedLead });
+    
+    // Log History
+    await logChange({
+      companyCode: updatedLead.companyCode,
+      contactNumber: updatedLead.contactNumber,
+      contactName: updatedLead.contactName,
+      companyName: updatedLead.leadCompanyName,
+      action: 'Remark Added',
+      newValue: remark,
+      details: `To Director: ${updatedLead.contactName || 'Primary'}`,
+      changedBy: updatedLead.assignedEmployeePhone
+    });
+
     return res.status(200).json({ success: true, lead: updatedLead });
   } catch (err) {
     console.error('[add lead remark]', err);
