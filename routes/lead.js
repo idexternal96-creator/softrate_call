@@ -91,13 +91,16 @@ router.get('/employee/sets', async (req, res) => {
 // GET — fetch all leads for an admin's company (optionally filter by setLabel)
 router.get('/admin', async (req, res) => {
   try {
-    const { companyCode, setLabel } = req.query;
+    const { companyCode, setLabel, remark } = req.query;
     if (!companyCode) {
       return res.status(400).json({ success: false, message: 'companyCode is required.' });
     }
     const query = { companyCode };
     if (setLabel) {
       query.setLabel = setLabel;
+    }
+    if (remark) {
+      query.remarks = { $regex: remark, $options: 'i' };
     }
     const leads = await Lead.find(query).sort({ sheetOrder: 1, createdAt: 1 });
 
