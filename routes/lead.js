@@ -2,6 +2,8 @@ const express = require('express');
 const Lead = require('../models/Lead');
 const eventBus = require('../services/eventBus');
 const { logChange } = require('../services/historyService');
+const { getAiBriefForLead } = require('../services/ai/researchWorkflow');
+const { getAiSuggestionForLead } = require('../services/ai/suggestionWorkflow');
 const router = express.Router();
 
 // POST — create a single lead
@@ -170,6 +172,36 @@ router.post('/admin/delete-set', async (req, res) => {
   } catch (err) {
     console.error('[admin delete set leads]', err);
     return res.status(500).json({ success: false, message: 'Server error deleting admin set.' });
+  }
+});
+
+// GET — fetch cached or newly generated AI brief for a lead/company
+router.get('/:id/ai-brief', async (req, res) => {
+  try {
+    const result = await getAiBriefForLead(req.params.id);
+    return res.status(result.status).json(result.body);
+  } catch (err) {
+    console.error('[get lead ai brief]', err);
+    return res.status(500).json({
+      success: false,
+      retryable: true,
+      message: 'Server error generating AI brief.',
+    });
+  }
+});
+
+// POST — fetch scenario-specific AI suggestion for a lead/workflow
+router.post('/:id/ai-suggestion', async (req, res) => {
+  try {
+    const result = await getAiSuggestionForLead(req.params.id, req.body || {});
+    return res.status(result.status).json(result.body);
+  } catch (err) {
+    console.error('[get lead ai suggestion]', err);
+    return res.status(500).json({
+      success: false,
+      retryable: true,
+      message: 'Server error generating AI suggestion.',
+    });
   }
 });
 

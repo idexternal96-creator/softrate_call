@@ -1,7 +1,8 @@
-require('dotenv').config();
+require('./loadEnv');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const { getAiConfigStatus } = require('./services/ai/modelFactory');
 
 const app = express();
 
@@ -128,6 +129,12 @@ app.get('/api/events', (req, res) => {
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  const aiConfig = getAiConfigStatus();
+  if (aiConfig.ok) {
+    console.log(`🤖 AI brief config ready for model ${process.env.OPENROUTER_MODEL}`);
+  } else {
+    console.warn(`⚠️ AI brief config incomplete. Missing: ${aiConfig.missing.join(', ')}`);
+  }
 });
 
 module.exports = app;

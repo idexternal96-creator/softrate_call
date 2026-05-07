@@ -7,7 +7,11 @@ const { notifyCompanyOfApproval, notifyCompanyOfRejection } = require('../servic
 
 const router = express.Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your_admin_jwt_secret';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is required. Add it to the workspace root .env file.');
+}
 
 // Admin Login (JSON API)
 router.post('/login', async (req, res) => {

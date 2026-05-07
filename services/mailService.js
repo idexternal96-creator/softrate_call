@@ -43,7 +43,7 @@ const notifyAdminOfRequest = (company) => {
         <li><strong>Code:</strong> ${company.companyCode}</li>
         <li><strong>Status:</strong> ${company.status}</li>
       </ul>
-      ${isTrial ? `<p><a href="http://localhost:4000/admin">Go to Admin Dashboard to Approve/Reject</a></p>` : ''}
+      ${isTrial ? `<p><a href="${FRONTEND_URL}">Open Admin Dashboard to Approve or Reject</a></p>` : ''}
     `,
   });
 };
