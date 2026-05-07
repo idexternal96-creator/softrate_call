@@ -19,5 +19,7 @@ const callLogSchema = new mongoose.Schema({
 
 // Unique per employee per day per company
 callLogSchema.index({ companyCode: 1, phone: 1, date: 1 }, { unique: true });
+callLogSchema.index({ companyCode: 1, date: 1 });
+callLogSchema.index({ companyCode: 1, date: 1, phone: 1 });
 
 module.exports = mongoose.model('CallLog', callLogSchema);

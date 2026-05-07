@@ -1,63 +1,122 @@
-/**
- * eventBus.js
- * In-memory SSE client registry.
- * Supports emitting events to a specific employee or entire company.
- */
+const crypto = require('crypto');
+const { getRedisClient, getRedisSubscriber, isRedisEnabled } = require('./redisClient');
 
 // Map<"companyCode_phone", Set<res>>
 const clients = new Map();
+const instanceId = crypto.randomUUID();
+let subscriberReady = false;
 
-function _key(companyCode, phone) {
+function key(companyCode, phone) {
   return `${companyCode}__${phone}`;
 }
 
-/**
- * Register a new SSE response for an employee.
- */
-function addClient(companyCode, phone, res) {
-  const k = _key(companyCode, phone);
-  if (!clients.has(k)) clients.set(k, new Set());
-  clients.get(k).add(res);
-  console.log(`[SSE] Client connected: ${k} (total: ${clients.get(k).size})`);
-}
-
-/**
- * Remove an SSE response (called on connection close).
- */
-function removeClient(companyCode, phone, res) {
-  const k = _key(companyCode, phone);
-  const set = clients.get(k);
-  if (set) {
-    set.delete(res);
-    if (set.size === 0) clients.delete(k);
-  }
-  console.log(`[SSE] Client disconnected: ${k}`);
-}
-
-/**
- * Send an event to one specific employee.
- */
-function emitToEmployee(companyCode, phone, data) {
-  const k = _key(companyCode, phone);
-  const set = clients.get(k);
+function emitLocalToEmployee(companyCode, phone, data) {
+  const clientKey = key(companyCode, phone);
+  const set = clients.get(clientKey);
   if (!set || set.size === 0) return;
+
   const payload = `data: ${JSON.stringify(data)}\n\n`;
   for (const res of set) {
-    try { res.write(payload); } catch (e) { set.delete(res); }
+    try {
+      res.write(payload);
+    } catch (err) {
+      set.delete(res);
+    }
   }
 }
 
-/**
- * Send an event to ALL employees of a company.
- */
-function emitToCompany(companyCode, data) {
+function emitLocalToCompany(companyCode, data) {
   const payload = `data: ${JSON.stringify(data)}\n\n`;
-  for (const [k, set] of clients) {
-    if (k.startsWith(`${companyCode}__`)) {
-      for (const res of set) {
-        try { res.write(payload); } catch (e) { set.delete(res); }
+  for (const [clientKey, set] of clients) {
+    if (!clientKey.startsWith(`${companyCode}__`)) continue;
+    for (const res of set) {
+      try {
+        res.write(payload);
+      } catch (err) {
+        set.delete(res);
       }
     }
+  }
+}
+
+async function publish(channel, data) {
+  const redis = getRedisClient();
+  if (!redis || !isRedisEnabled()) return;
+
+  try {
+    await redis.publish(channel, JSON.stringify({
+      sourceInstanceId: instanceId,
+      data,
+    }));
+  } catch (err) {
+    console.warn(`[SSE redis publish] ${err.message}`);
+  }
+}
+
+function ensureRedisSubscriber() {
+  if (subscriberReady || !isRedisEnabled()) return;
+
+  const subscriber = getRedisSubscriber();
+  if (!subscriber) return;
+
+  subscriberReady = true;
+
+  subscriber.psubscribe('events:company:*', 'events:employee:*:*', (err) => {
+    if (err) {
+      console.warn(`[SSE redis subscribe] ${err.message}`);
+    }
+  });
+
+  subscriber.on('pmessage', (_pattern, channel, message) => {
+    try {
+      const parsed = JSON.parse(message);
+      if (parsed.sourceInstanceId === instanceId) return;
+
+      if (channel.startsWith('events:company:')) {
+        const companyCode = channel.slice('events:company:'.length);
+        emitLocalToCompany(companyCode, parsed.data);
+        return;
+      }
+
+      if (channel.startsWith('events:employee:')) {
+        const [, , companyCode, phone] = channel.split(':');
+        emitLocalToEmployee(companyCode, phone, parsed.data);
+      }
+    } catch (err) {
+      console.warn(`[SSE redis pmessage] ${err.message}`);
+    }
+  });
+}
+
+function addClient(companyCode, phone, res) {
+  ensureRedisSubscriber();
+  const clientKey = key(companyCode, phone);
+  if (!clients.has(clientKey)) clients.set(clientKey, new Set());
+  clients.get(clientKey).add(res);
+  console.log(`[SSE] Client connected: ${clientKey} (total: ${clients.get(clientKey).size})`);
+}
+
+function removeClient(companyCode, phone, res) {
+  const clientKey = key(companyCode, phone);
+  const set = clients.get(clientKey);
+  if (set) {
+    set.delete(res);
+    if (set.size === 0) clients.delete(clientKey);
+  }
+  console.log(`[SSE] Client disconnected: ${clientKey}`);
+}
+
+function emitToEmployee(companyCode, phone, data, options = {}) {
+  emitLocalToEmployee(companyCode, phone, data);
+  if (!options.skipRedis) {
+    publish(`events:employee:${companyCode}:${phone}`, data);
+  }
+}
+
+function emitToCompany(companyCode, data, options = {}) {
+  emitLocalToCompany(companyCode, data);
+  if (!options.skipRedis) {
+    publish(`events:company:${companyCode}`, data);
   }
 }
 

@@ -19,4 +19,7 @@ const bookmarkSchema = new mongoose.Schema({
   createdAt:     { type: Date, default: Date.now },
 });
 
+bookmarkSchema.index({ companyCode: 1, employeePhone: 1, createdAt: -1 });
+bookmarkSchema.index({ companyCode: 1, reminderDate: 1 });
+
 module.exports = mongoose.model('Bookmark', bookmarkSchema);

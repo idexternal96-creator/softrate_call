@@ -3,6 +3,15 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const { getAiConfigStatus } = require('./services/ai/modelFactory');
+const { runLeadBackfill } = require('./services/leadBackfillService');
+
+const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET'];
+const missingEnvVars = requiredEnvVars.filter((key) => !process.env[key] || !process.env[key].trim());
+
+if (missingEnvVars.length > 0) {
+  console.error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  process.exit(1);
+}
 
 const app = express();
 
@@ -22,6 +31,9 @@ mongoose
   .connect(MONGO_URI)
   .then(() => {
     console.log('✅ MongoDB connected successfully');
+    runLeadBackfill().catch((err) => {
+      console.error('❌ Lead backfill failed:', err.message);
+    });
   })
   .catch((err) => {
     console.error('❌ MongoDB connection error:', err.message);

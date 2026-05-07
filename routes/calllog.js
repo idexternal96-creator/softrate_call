@@ -4,6 +4,12 @@ const CallLog  = require('../models/CallLog');
 const CallDetail = require('../models/CallDetail');
 const Employee = require('../models/Employee');
 const User     = require('../models/User');
+const { getOrSet } = require('../services/cacheService');
+const {
+  CALLLOG_CACHE_TTLS,
+  buildCalllogCacheKey,
+  invalidateCalllogCaches,
+} = require('../services/calllogCache');
 
 // Format date as YYYY-MM-DD using LOCAL time (matches what Flutter sends)
 function toDateStr(d) {
@@ -183,6 +189,8 @@ router.post('/sync', async (req, res) => {
       );
     }
 
+    await invalidateCalllogCaches({ companyCode, phone });
+
     return res.status(200).json({ success: true });
   } catch (err) {
     console.error('[calllog sync]', err);
@@ -196,23 +204,31 @@ router.get('/summary', async (req, res) => {
     const { companyCode } = req.query;
     if (!companyCode) return res.status(400).json({ success: false, message: 'companyCode required' });
     const [from, to] = resolveRange(req.query);
-    const docs = await CallLog.find({ companyCode, date: { $gte: from, $lte: to } });
-    const totals = docs.reduce((acc, d) => ({
-      incoming: acc.incoming + d.incoming, outgoing: acc.outgoing + d.outgoing,
-      missed: acc.missed + d.missed, rejected: acc.rejected + d.rejected,
-      incomingDuration: acc.incomingDuration + d.incomingDuration,
-      outgoingDuration: acc.outgoingDuration + d.outgoingDuration,
-      totalDuration: acc.totalDuration + d.totalDuration,
-      connected: acc.connected + (d.connected || 0),
-      incomingConnected: acc.incomingConnected + (d.incomingConnected || 0),
-      outgoingConnected: acc.outgoingConnected + (d.outgoingConnected || 0),
-    }), { incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0, connected:0, incomingConnected:0, outgoingConnected:0 });
+    const cacheKey = buildCalllogCacheKey(`calllog:summary:${companyCode}`, { ...req.query, from, to });
+    const { value } = await getOrSet(cacheKey, CALLLOG_CACHE_TTLS.summary, async () => {
+      const docs = await CallLog.find({ companyCode, date: { $gte: from, $lte: to } }).lean();
+      const totals = docs.reduce((acc, d) => ({
+        incoming: acc.incoming + d.incoming, outgoing: acc.outgoing + d.outgoing,
+        missed: acc.missed + d.missed, rejected: acc.rejected + d.rejected,
+        incomingDuration: acc.incomingDuration + d.incomingDuration,
+        outgoingDuration: acc.outgoingDuration + d.outgoingDuration,
+        totalDuration: acc.totalDuration + d.totalDuration,
+        connected: acc.connected + (d.connected || 0),
+        incomingConnected: acc.incomingConnected + (d.incomingConnected || 0),
+        outgoingConnected: acc.outgoingConnected + (d.outgoingConnected || 0),
+      }), { incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0, connected:0, incomingConnected:0, outgoingConnected:0 });
 
-    return res.status(200).json({
-      success: true, from, to,
-      stats: { ...totals, total: totals.incoming+totals.outgoing+totals.missed+totals.rejected,
-               connected: totals.connected },
+      return {
+        success: true, from, to,
+        stats: {
+          ...totals,
+          total: totals.incoming + totals.outgoing + totals.missed + totals.rejected,
+          connected: totals.connected,
+        },
+      };
     });
+
+    return res.status(200).json(value);
   } catch (err) {
     console.error('[calllog summary]', err);
     return res.status(500).json({ success: false, message: 'Server error' });
@@ -225,82 +241,87 @@ router.get('/employees', async (req, res) => {
     const { companyCode, callType, duration, callTime } = req.query;
     if (!companyCode) return res.status(400).json({ success: false, message: 'companyCode required' });
     const [from, to] = resolveRange(req.query);
+    const cacheKey = buildCalllogCacheKey(`calllog:employees:${companyCode}`, { ...req.query, from, to });
 
-    // If advanced filters are present, we MUST aggregate from individual CallDetail records
-    if (callType || duration || callTime) {
-      const query = { companyCode, date: { $gte: from, $lte: to } };
-      
-      // 1. Filter by callType if specified
-      if (callType && callType !== 'Select') query.callType = callType.toLowerCase();
+    const { value } = await getOrSet(cacheKey, CALLLOG_CACHE_TTLS.employees, async () => {
+      // If advanced filters are present, we MUST aggregate from individual CallDetail records
+      if (callType || duration || callTime) {
+        const query = { companyCode, date: { $gte: from, $lte: to } };
+        
+        if (callType && callType !== 'Select') query.callType = callType.toLowerCase();
 
-      let calls = await CallDetail.find(query);
+        let calls = await CallDetail.find(query).lean();
 
-      // 2. Filter by duration on the items found
-      if (duration && duration !== 'Select') {
-        calls = calls.filter(c => {
-          if (duration === '< 1 min') return c.duration < 60;
-          if (duration === '1-5 min') return c.duration >= 60 && c.duration <= 300;
-          if (duration === '> 5 min') return c.duration > 300;
-          return true;
-        });
+        if (duration && duration !== 'Select') {
+          calls = calls.filter(c => {
+            if (duration === '< 1 min') return c.duration < 60;
+            if (duration === '1-5 min') return c.duration >= 60 && c.duration <= 300;
+            if (duration === '> 5 min') return c.duration > 300;
+            return true;
+          });
+        }
+
+        if (callTime && callTime !== 'Select') {
+          calls = calls.filter(c => {
+            const hour = new Date(c.timestamp).getHours();
+            if (callTime === 'Morning') return hour >= 6 && hour < 12;
+            if (callTime === 'Afternoon') return hour >= 12 && hour < 17;
+            if (callTime === 'Evening') return hour >= 17 && hour < 21;
+            if (callTime === 'Night') return (hour >= 21 && hour <= 23) || (hour >= 0 && hour < 6);
+            return true;
+          });
+        }
+
+        const company = await User.findOne({ companyCode }, 'connectedCallDuration').lean();
+        const connThreshold = company?.connectedCallDuration || 0;
+
+        const map = {};
+        for (const c of calls) {
+          if (!map[c.phone]) map[c.phone] = { phone: c.phone, incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0, connected:0, incomingConnected:0, outgoingConnected:0 };
+          const e = map[c.phone];
+          const type = c.callType.toLowerCase();
+          const dur = c.duration || 0;
+          const isConnected = connThreshold > 0 ? (dur >= connThreshold) : (dur > 0);
+          
+          if (isConnected) e.connected++;
+          
+          if (type === 'incoming') { 
+            e.incoming++; e.incomingDuration += dur; e.totalDuration += dur;
+            if (isConnected) e.incomingConnected++;
+          }
+          else if (type === 'outgoing') { 
+            e.outgoing++; e.outgoingDuration += dur; e.totalDuration += dur;
+            if (isConnected) e.outgoingConnected++;
+          }
+          else if (type === 'missed') { e.missed++; }
+          else if (type === 'rejected') { e.rejected++; }
+        }
+
+        const employees = Object.values(map).map(e => ({ ...e, total: e.incoming + e.outgoing + e.missed + e.rejected }));
+        return { success: true, employees };
       }
 
-      // 3. Filter by callTime (Time of Day)
-      if (callTime && callTime !== 'Select') {
-        calls = calls.filter(c => {
-          const hour = new Date(c.timestamp).getHours();
-          if (callTime === 'Morning') return hour >= 6 && hour < 12;
-          if (callTime === 'Afternoon') return hour >= 12 && hour < 17;
-          if (callTime === 'Evening') return hour >= 17 && hour < 21;
-          if (callTime === 'Night') return (hour >= 21 && hour <= 23) || (hour >= 0 && hour < 6);
-          return true;
-        });
-      }
-
-      // Fetch company setting for connected call threshold
-      const company = await User.findOne({ companyCode });
-      const connThreshold = company?.connectedCallDuration || 0;
-
-      // Aggregate filtered calls by employee
+      const docs = await CallLog.find({ companyCode, date: { $gte: from, $lte: to } }).lean();
       const map = {};
-      for (const c of calls) {
-        if (!map[c.phone]) map[c.phone] = { phone: c.phone, incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0, connected:0, incomingConnected:0, outgoingConnected:0 };
-        const e = map[c.phone];
-        const type = c.callType.toLowerCase();
-        const dur = c.duration || 0;
-        const isConnected = connThreshold > 0 ? (dur >= connThreshold) : (dur > 0);
-        
-        if (isConnected) e.connected++;
-        
-        if (type === 'incoming') { 
-          e.incoming++; e.incomingDuration += dur; e.totalDuration += dur;
-          if (isConnected) e.incomingConnected++;
-        }
-        else if (type === 'outgoing') { 
-          e.outgoing++; e.outgoingDuration += dur; e.totalDuration += dur;
-          if (isConnected) e.outgoingConnected++;
-        }
-        else if (type === 'missed') { e.missed++; }
-        else if (type === 'rejected') { e.rejected++; }
+      for (const d of docs) {
+        if (!map[d.phone]) map[d.phone] = { phone: d.phone, incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0, connected:0, incomingConnected:0, outgoingConnected:0 };
+        const e = map[d.phone];
+        e.incoming += d.incoming;
+        e.outgoing += d.outgoing;
+        e.missed += d.missed;
+        e.rejected += d.rejected;
+        e.incomingDuration += d.incomingDuration;
+        e.outgoingDuration += d.outgoingDuration;
+        e.totalDuration += d.totalDuration;
+        e.connected += (d.connected || 0);
+        e.incomingConnected += (d.incomingConnected || 0);
+        e.outgoingConnected += (d.outgoingConnected || 0);
       }
-      const employees = Object.values(map).map(e => ({ ...e, total: e.incoming+e.outgoing+e.missed+e.rejected }));
-      return res.status(200).json({ success: true, employees });
-    }
+      const employees = Object.values(map).map(e => ({ ...e, total: e.incoming + e.outgoing + e.missed + e.rejected }));
+      return { success: true, employees };
+    });
 
-    // Default: Use pre-aggregated CallLog for speed
-    const docs = await CallLog.find({ companyCode, date: { $gte: from, $lte: to } });
-    const map = {};
-    for (const d of docs) {
-      if (!map[d.phone]) map[d.phone] = { phone: d.phone, incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0, connected:0, incomingConnected:0, outgoingConnected:0 };
-      const e = map[d.phone];
-      e.incoming+=d.incoming; e.outgoing+=d.outgoing; e.missed+=d.missed; e.rejected+=d.rejected;
-      e.incomingDuration+=d.incomingDuration; e.outgoingDuration+=d.outgoingDuration; e.totalDuration+=d.totalDuration;
-      e.connected += (d.connected || 0);
-      e.incomingConnected += (d.incomingConnected || 0);
-      e.outgoingConnected += (d.outgoingConnected || 0);
-    }
-    const employees = Object.values(map).map(e => ({ ...e, total: e.incoming+e.outgoing+e.missed+e.rejected }));
-    return res.status(200).json({ success: true, employees });
+    return res.status(200).json(value);
   } catch (err) {
     console.error('[employees report]', err);
     return res.status(500).json({ success: false, message: 'Server error' });
@@ -313,22 +334,30 @@ router.get('/employee', async (req, res) => {
     const { companyCode, phone } = req.query;
     if (!companyCode || !phone) return res.status(400).json({ success: false, message: 'companyCode and phone required' });
     const [from, to] = resolveRange(req.query);
-    const docs = await CallLog.find({ companyCode, phone, date: { $gte: from, $lte: to } });
-    const totals = docs.reduce((acc, d) => ({
-      incoming: acc.incoming + d.incoming, outgoing: acc.outgoing + d.outgoing,
-      missed: acc.missed + d.missed, rejected: acc.rejected + d.rejected,
-      incomingDuration: acc.incomingDuration + d.incomingDuration,
-      outgoingDuration: acc.outgoingDuration + d.outgoingDuration,
-      totalDuration: acc.totalDuration + d.totalDuration,
-      connected: acc.connected + (d.connected || 0),
-      incomingConnected: acc.incomingConnected + (d.incomingConnected || 0),
-      outgoingConnected: acc.outgoingConnected + (d.outgoingConnected || 0),
-    }), { incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0, connected:0, incomingConnected:0, outgoingConnected:0 });
+    const cacheKey = buildCalllogCacheKey(`calllog:employee:${companyCode}:${phone}`, { ...req.query, from, to });
+    const { value } = await getOrSet(cacheKey, CALLLOG_CACHE_TTLS.employee, async () => {
+      const docs = await CallLog.find({ companyCode, phone, date: { $gte: from, $lte: to } }).lean();
+      const totals = docs.reduce((acc, d) => ({
+        incoming: acc.incoming + d.incoming, outgoing: acc.outgoing + d.outgoing,
+        missed: acc.missed + d.missed, rejected: acc.rejected + d.rejected,
+        incomingDuration: acc.incomingDuration + d.incomingDuration,
+        outgoingDuration: acc.outgoingDuration + d.outgoingDuration,
+        totalDuration: acc.totalDuration + d.totalDuration,
+        connected: acc.connected + (d.connected || 0),
+        incomingConnected: acc.incomingConnected + (d.incomingConnected || 0),
+        outgoingConnected: acc.outgoingConnected + (d.outgoingConnected || 0),
+      }), { incoming:0, outgoing:0, missed:0, rejected:0, incomingDuration:0, outgoingDuration:0, totalDuration:0, connected:0, incomingConnected:0, outgoingConnected:0 });
 
-    return res.status(200).json({
-      success: true, phone, from, to,
-      stats: { ...totals, total: totals.incoming+totals.outgoing+totals.missed+totals.rejected, connected: totals.connected },
+      return {
+        success: true,
+        phone,
+        from,
+        to,
+        stats: { ...totals, total: totals.incoming + totals.outgoing + totals.missed + totals.rejected, connected: totals.connected },
+      };
     });
+
+    return res.status(200).json(value);
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
@@ -341,12 +370,16 @@ router.get('/details', async (req, res) => {
     const { companyCode, phone } = req.query;
     if (!companyCode || !phone) return res.status(400).json({ success: false, message: 'companyCode and phone required' });
     const [from, to] = resolveRange(req.query);
+    const cacheKey = buildCalllogCacheKey(`calllog:details:${companyCode}:${phone}`, { ...req.query, from, to });
+    const { value } = await getOrSet(cacheKey, CALLLOG_CACHE_TTLS.details, async () => {
+      const calls = await CallDetail.find({
+        companyCode, phone, date: { $gte: from, $lte: to },
+      }).sort({ timestamp: -1 }).lean();
 
-    const calls = await CallDetail.find({
-      companyCode, phone, date: { $gte: from, $lte: to },
-    }).sort({ timestamp: -1 });
+      return { success: true, calls };
+    });
 
-    return res.status(200).json({ success: true, calls });
+    return res.status(200).json(value);
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Server error' });
   }
@@ -359,37 +392,41 @@ router.get('/timeline', async (req, res) => {
     const { companyCode, phone } = req.query;
     if (!companyCode) return res.status(400).json({ success: false, message: 'companyCode required' });
     const [from, to] = resolveRange(req.query);
+    const cachePrefix = phone
+      ? `calllog:timeline:${companyCode}:${phone}`
+      : `calllog:timeline:${companyCode}`;
+    const cacheKey = buildCalllogCacheKey(cachePrefix, { ...req.query, from, to });
+    const { value } = await getOrSet(cacheKey, CALLLOG_CACHE_TTLS.timeline, async () => {
+      const baseQuery = { companyCode, date: { $gte: from, $lte: to } };
+      if (phone) baseQuery.phone = phone;
 
-    const baseQuery = { companyCode, date: { $gte: from, $lte: to } };
-    if (phone) baseQuery.phone = phone;
+      if (from === to) {
+        const detailQuery = { companyCode, date: from };
+        if (phone) detailQuery.phone = phone;
+        const calls = await CallDetail.find(detailQuery).lean();
+        const byHour = {};
 
-    if (from === to) {
-      // Single day: group by hour from CallDetail
-      const detailQuery = { companyCode, date: from };
-      if (phone) detailQuery.phone = phone;
-      const calls = await CallDetail.find(detailQuery);
-      const byHour = {};
-      
-      for (let i = 0; i < 24; i++) {
-        const hourStr = i.toString().padStart(2, '0');
-        const pseudoDate = `${from}T${hourStr}:00:00`;
-        byHour[i] = { date: pseudoDate, incoming: 0, outgoing: 0, missed: 0, rejected: 0, _isHourly: true };
-      }
-
-      for (const c of calls) {
-        const hour = new Date(c.timestamp).getHours();
-        const type = c.callType.toLowerCase();
-        if (byHour[hour]) {
-          if (type === 'incoming') byHour[hour].incoming++;
-          else if (type === 'outgoing') byHour[hour].outgoing++;
-          else if (type === 'missed') byHour[hour].missed++;
-          else if (type === 'rejected') byHour[hour].rejected++;
+        for (let i = 0; i < 24; i++) {
+          const hourStr = i.toString().padStart(2, '0');
+          const pseudoDate = `${from}T${hourStr}:00:00`;
+          byHour[i] = { date: pseudoDate, incoming: 0, outgoing: 0, missed: 0, rejected: 0, _isHourly: true };
         }
+
+        for (const c of calls) {
+          const hour = new Date(c.timestamp).getHours();
+          const type = c.callType.toLowerCase();
+          if (byHour[hour]) {
+            if (type === 'incoming') byHour[hour].incoming++;
+            else if (type === 'outgoing') byHour[hour].outgoing++;
+            else if (type === 'missed') byHour[hour].missed++;
+            else if (type === 'rejected') byHour[hour].rejected++;
+          }
+        }
+
+        return { success: true, timeline: Object.values(byHour) };
       }
-      return res.status(200).json({ success: true, timeline: Object.values(byHour) });
-    } else {
-      // Multiple days: group by date from CallLog
-      const docs = await CallLog.find(baseQuery).sort({ date: 1 });
+
+      const docs = await CallLog.find(baseQuery).sort({ date: 1 }).lean();
       const byDate = {};
       for (const d of docs) {
         if (!byDate[d.date]) byDate[d.date] = { date: d.date, incoming: 0, outgoing: 0, missed: 0, rejected: 0 };
@@ -398,8 +435,10 @@ router.get('/timeline', async (req, res) => {
         byDate[d.date].missed    += d.missed;
         byDate[d.date].rejected  += d.rejected;
       }
-      return res.status(200).json({ success: true, timeline: Object.values(byDate).sort((a,b) => a.date.localeCompare(b.date)) });
-    }
+      return { success: true, timeline: Object.values(byDate).sort((a,b) => a.date.localeCompare(b.date)) };
+    });
+
+    return res.status(200).json(value);
   } catch (err) {
     console.error('[calllog timeline]', err);
     return res.status(500).json({ success: false, message: 'Server error' });
@@ -411,21 +450,23 @@ router.get('/timeline', async (req, res) => {
 router.get('/lead-counts', async (req, res) => {
   try {
     const { companyCode } = req.query;
-    console.log('[DEBUG] lead-counts request for companyCode:', companyCode);
     if (!companyCode) return res.status(400).json({ success: false, message: 'companyCode required' });
+    const cacheKey = buildCalllogCacheKey(`calllog:lead-counts:${companyCode}`, req.query);
+    const { value } = await getOrSet(cacheKey, CALLLOG_CACHE_TTLS.leadCounts, async () => {
+      const counts = await CallDetail.aggregate([
+        { $match: { companyCode } },
+        { $group: { _id: '$number', count: { $sum: 1 } } },
+      ]);
 
-    const counts = await CallDetail.aggregate([
-      { $match: { companyCode } },
-      { $group: { _id: "$number", count: { $sum: 1 } } }
-    ]);
+      const countMap = {};
+      counts.forEach((item) => {
+        if (item._id) countMap[item._id] = item.count;
+      });
 
-    const countMap = {};
-    counts.forEach(c => {
-      if (c._id) countMap[c._id] = c.count;
+      return { success: true, counts: countMap };
     });
 
-    console.log(`[DEBUG] lead-counts found ${Object.keys(countMap).length} leads for ${companyCode}`);
-    return res.status(200).json({ success: true, counts: countMap });
+    return res.status(200).json(value);
   } catch (err) {
     console.error('[lead-counts]', err);
     return res.status(500).json({ success: false, message: 'Server error' });
