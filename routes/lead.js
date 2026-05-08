@@ -10,6 +10,7 @@ const {
   buildEmployeeCompanyKey,
   buildEmployeeLeadListKey,
   buildEmployeeSetKey,
+  buildEmployeeStatusCountKey,
   invalidateLeadCaches,
 } = require('../services/leadCache');
 const { logChange } = require('../services/historyService');
@@ -289,6 +290,46 @@ router.get('/employee/companies', async (req, res) => {
   } catch (err) {
     console.error('[get employee companies]', err);
     return res.status(500).json({ success: false, message: 'Server error fetching companies.' });
+  }
+});
+
+router.get('/employee/status-counts', async (req, res) => {
+  try {
+    const { companyCode, phone } = req.query;
+    if (!companyCode || !phone) {
+      return res.status(400).json({ success: false, message: 'companyCode and phone are required.' });
+    }
+
+    const cacheKey = buildEmployeeStatusCountKey(companyCode, phone, req.query);
+    const { value } = await getOrSet(cacheKey, LEAD_CACHE_TTLS.facets, async () => {
+      const rows = await Lead.aggregate([
+        {
+          $match: {
+            companyCode,
+            assignedEmployeePhone: phone,
+            isArchived: { $ne: true },
+          },
+        },
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 },
+          },
+        },
+      ]);
+
+      const counts = {};
+      for (const row of rows) {
+        counts[row._id || 'New'] = row.count;
+      }
+
+      return { counts };
+    });
+
+    return res.status(200).json({ success: true, counts: value.counts || {} });
+  } catch (err) {
+    console.error('[get employee status counts]', err);
+    return res.status(500).json({ success: false, message: 'Server error fetching status counts.' });
   }
 });
 

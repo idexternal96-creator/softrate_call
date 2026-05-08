@@ -29,6 +29,10 @@ function buildAdminCompanyKey(companyCode, params) {
   return `lead:companies:admin:${companyCode}:${hashObject(params)}`;
 }
 
+function buildEmployeeStatusCountKey(companyCode, phone, params) {
+  return `lead:status-counts:employee:${companyCode}:${phone}:${hashObject(params)}`;
+}
+
 async function invalidateLeadCaches({ companyCode, phone }) {
   const prefixes = [
     `lead:list:admin:${companyCode}:`,
@@ -41,12 +45,14 @@ async function invalidateLeadCaches({ companyCode, phone }) {
       `lead:list:employee:${companyCode}:${phone}:`,
       `lead:sets:employee:${companyCode}:${phone}:`,
       `lead:companies:employee:${companyCode}:${phone}:`,
+      `lead:status-counts:employee:${companyCode}:${phone}:`,
     );
   } else {
     prefixes.push(
       `lead:list:employee:${companyCode}:`,
       `lead:sets:employee:${companyCode}:`,
       `lead:companies:employee:${companyCode}:`,
+      `lead:status-counts:employee:${companyCode}:`,
     );
   }
 
@@ -61,5 +67,6 @@ module.exports = {
   buildEmployeeCompanyKey,
   buildEmployeeLeadListKey,
   buildEmployeeSetKey,
+  buildEmployeeStatusCountKey,
   invalidateLeadCaches,
 };
