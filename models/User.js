@@ -137,6 +137,14 @@ const userSchema = new mongoose.Schema(
       type: Number,
       default: 18,
     },
+    invoiceRegisteredAddress: {
+      type: String,
+      trim: true,
+    },
+    invoiceFooter: {
+      type: String,
+      trim: true,
+    },
     bankDetails: {
       bankName: { type: String, trim: true },
       accountNumber: { type: String, trim: true },

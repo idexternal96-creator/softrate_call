@@ -498,7 +498,7 @@ router.post('/reset-password', async (req, res) => {
 router.get('/company/:companyCode/settings', async (req, res) => {
   try {
     const { companyCode } = req.params;
-    const user = await User.findOne({ companyCode }, 'companyName breakHourLimit connectedCallDuration leadStatuses interestedPageStatuses dnpPageStatuses convertedPageStatuses invoiceLogo showCompanyNameOnInvoice gstNumber gstPercentage bankDetails contactDetails products productRemarks');
+    const user = await User.findOne({ companyCode }, 'companyName breakHourLimit connectedCallDuration leadStatuses interestedPageStatuses dnpPageStatuses convertedPageStatuses invoiceLogo showCompanyNameOnInvoice gstNumber gstPercentage invoiceRegisteredAddress invoiceFooter bankDetails contactDetails products productRemarks');
     if (!user) return res.status(404).json({ success: false, message: 'Company not found.' });
     const leadStatuses = user.leadStatuses || [];
     const valid = new Set(leadStatuses);
@@ -518,6 +518,8 @@ router.get('/company/:companyCode/settings', async (req, res) => {
         showCompanyNameOnInvoice: user.showCompanyNameOnInvoice ?? true,
         gstNumber: user.gstNumber,
         gstPercentage: user.gstPercentage ?? 18,
+        invoiceRegisteredAddress: user.invoiceRegisteredAddress || '',
+        invoiceFooter: user.invoiceFooter || '',
         bankDetails: user.bankDetails || { bankName: '', accountNumber: '', ifscCode: '', branchName: '' },
         contactDetails: user.contactDetails || { website: '', email: '', phone: '' },
         products: user.products || [],
@@ -539,7 +541,7 @@ router.put('/company/:companyCode/settings', async (req, res) => {
     const { companyCode } = req.params;
     const { 
       breakHourLimit, connectedCallDuration, leadStatuses, interestedPageStatuses, dnpPageStatuses, convertedPageStatuses,
-      invoiceLogo, showCompanyNameOnInvoice, gstNumber, gstPercentage, bankDetails, contactDetails, products, productRemarks 
+      invoiceLogo, showCompanyNameOnInvoice, gstNumber, gstPercentage, invoiceRegisteredAddress, invoiceFooter, bankDetails, contactDetails, products, productRemarks 
     } = req.body;
 
     const update = {};
@@ -562,6 +564,8 @@ router.put('/company/:companyCode/settings', async (req, res) => {
     if (showCompanyNameOnInvoice !== undefined) update.showCompanyNameOnInvoice = !!showCompanyNameOnInvoice;
     if (gstNumber !== undefined) update.gstNumber = gstNumber;
     if (gstPercentage !== undefined) update.gstPercentage = Number(gstPercentage);
+    if (invoiceRegisteredAddress !== undefined) update.invoiceRegisteredAddress = invoiceRegisteredAddress;
+    if (invoiceFooter !== undefined) update.invoiceFooter = invoiceFooter;
     if (bankDetails !== undefined) update.bankDetails = bankDetails;
     if (contactDetails !== undefined) update.contactDetails = contactDetails;
     if (products !== undefined) update.products = Array.isArray(products) ? products : [];
@@ -601,6 +605,8 @@ router.put('/company/:companyCode/settings', async (req, res) => {
         showCompanyNameOnInvoice: user.showCompanyNameOnInvoice,
         gstNumber: user.gstNumber,
         gstPercentage: user.gstPercentage,
+        invoiceRegisteredAddress: user.invoiceRegisteredAddress,
+        invoiceFooter: user.invoiceFooter,
         bankDetails: user.bankDetails,
         contactDetails: user.contactDetails,
         products: user.products,
@@ -614,4 +620,3 @@ router.put('/company/:companyCode/settings', async (req, res) => {
 });
 
 module.exports = router;
-

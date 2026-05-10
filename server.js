@@ -97,6 +97,12 @@ app.use('/api/calllogs', require('./routes/calllog'));
 // Lead routes
 app.use('/api/leads', require('./routes/lead'));
 
+// Invoice routes
+app.use('/api/invoices', require('./routes/invoice'));
+
+// Quotation routes
+app.use('/api/quotations', require('./routes/quotation'));
+
 // Break log routes
 app.use('/api/breaklog', require('./routes/breaklog'));
 
