@@ -65,6 +65,11 @@ async function getCachedLeadSets({ companyCode, phone, cacheKey }) {
 async function getCachedLeadCompanies({ companyCode, phone, query, cacheKey }) {
   const companiesQuery = { ...query };
   delete companiesQuery.company;
+  delete companiesQuery.page;
+  delete companiesQuery.pageSize;
+  delete companiesQuery.paginated;
+  delete companiesQuery.sort;
+  delete companiesQuery.includeFacets;
 
   const { value } = await getOrSet(cacheKey, LEAD_CACHE_TTLS.facets, async () => {
     return getLeadCompanies({ companyCode, phone, query: companiesQuery });
@@ -75,6 +80,7 @@ async function getCachedLeadCompanies({ companyCode, phone, query, cacheKey }) {
 async function fetchLeadList({ companyCode, phone, scope, reqQuery }) {
   const pagination = parsePagination(reqQuery);
   const searchContext = buildLeadSearchQuery({ companyCode, phone, query: reqQuery });
+  const shouldIncludeFacets = !pagination.isPaginated || pagination.page === 1 || reqQuery.includeFacets === 'true';
   const cacheParams = {
     query: reqQuery,
     page: pagination.page,
@@ -111,32 +117,44 @@ async function fetchLeadList({ companyCode, phone, scope, reqQuery }) {
     };
   });
 
-  const [setPayload, companyPayload] = await Promise.all([
-    scope === 'employee'
-      ? getCachedLeadSets({
-          companyCode,
-          phone,
-          cacheKey: buildEmployeeSetKey(companyCode, phone, {}),
-        })
-      : getCachedLeadSets({
-          companyCode,
-          phone: undefined,
-          cacheKey: buildAdminSetKey(companyCode, {}),
-        }),
-    scope === 'employee'
-      ? getCachedLeadCompanies({
-          companyCode,
-          phone,
-          query: reqQuery,
-          cacheKey: buildEmployeeCompanyKey(companyCode, phone, reqQuery),
-        })
-      : getCachedLeadCompanies({
-          companyCode,
-          phone: undefined,
-          query: reqQuery,
-          cacheKey: buildAdminCompanyKey(companyCode, reqQuery),
-        }),
-  ]);
+  let setPayload = { sets: [], items: [] };
+  let companyPayload = { companies: [], names: [] };
+
+  if (shouldIncludeFacets) {
+    const facetQuery = { ...reqQuery };
+    delete facetQuery.page;
+    delete facetQuery.pageSize;
+    delete facetQuery.paginated;
+    delete facetQuery.sort;
+    delete facetQuery.includeFacets;
+
+    [setPayload, companyPayload] = await Promise.all([
+      scope === 'employee'
+        ? getCachedLeadSets({
+            companyCode,
+            phone,
+            cacheKey: buildEmployeeSetKey(companyCode, phone, {}),
+          })
+        : getCachedLeadSets({
+            companyCode,
+            phone: undefined,
+            cacheKey: buildAdminSetKey(companyCode, {}),
+          }),
+      scope === 'employee'
+        ? getCachedLeadCompanies({
+            companyCode,
+            phone,
+            query: facetQuery,
+            cacheKey: buildEmployeeCompanyKey(companyCode, phone, facetQuery),
+          })
+        : getCachedLeadCompanies({
+            companyCode,
+            phone: undefined,
+            query: facetQuery,
+            cacheKey: buildAdminCompanyKey(companyCode, facetQuery),
+          }),
+    ]);
+  }
 
   return buildLeadListResponse({
     items: value.items,
