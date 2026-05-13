@@ -7,6 +7,7 @@ const {
   buildAdminCompanyKey,
   buildAdminLeadListKey,
   buildAdminSetKey,
+  buildEmployeeCompanyContactsKey,
   buildEmployeeCompanyKey,
   buildEmployeeLeadListKey,
   buildEmployeeSetKey,
@@ -31,6 +32,8 @@ const { getAiBriefForLead } = require('../../../services/ai/researchWorkflow');
 const { getAiSuggestionForLead } = require('../../../services/ai/suggestionWorkflow');
 
 const router = express.Router();
+const DEFAULT_COMPANY_CONTACT_PAGE_SIZE = 40;
+const MAX_COMPANY_CONTACT_PAGE_SIZE = 200;
 
 function normalizeLeadForResponse(lead) {
   if (!lead) return lead;
@@ -71,6 +74,53 @@ async function getCachedLeadCompanies({ companyCode, phone, query, cacheKey }) {
   const { value } = await getOrSet(cacheKey, LEAD_CACHE_TTLS.facets, async () => {
     return getLeadCompanies({ companyCode, phone, query: companiesQuery });
   });
+  return value;
+}
+
+function parseContactPageSize(value) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_COMPANY_CONTACT_PAGE_SIZE;
+  return Math.min(parsed, MAX_COMPANY_CONTACT_PAGE_SIZE);
+}
+
+function shouldIncludeCompanyContacts(query) {
+  return query.includeContacts === true || String(query.includeContacts ?? '').trim().toLowerCase() === 'true';
+}
+
+async function getCachedEmployeeCompanyContacts({ companyCode, phone, query, companyNames, cacheKey }) {
+  const contactPageSize = parseContactPageSize(query.contactPageSize);
+  const contactQuery = { ...query };
+  delete contactQuery.page;
+  delete contactQuery.pageSize;
+  delete contactQuery.paginated;
+  delete contactQuery.includeContacts;
+  delete contactQuery.contactPageSize;
+  delete contactQuery.includeFacets;
+
+  const { value } = await getOrSet(cacheKey, LEAD_CACHE_TTLS.companyContacts, async () => {
+    const entries = await Promise.all(
+      companyNames
+        .filter(Boolean)
+        .map(async (companyName) => {
+          const { mongoQuery, projection, sort } = buildLeadSearchQuery({
+            companyCode,
+            phone,
+            query: {
+              ...contactQuery,
+              company: companyName,
+            },
+          });
+          const contacts = await Lead.find(mongoQuery, projection)
+            .sort(sort)
+            .limit(contactPageSize)
+            .lean();
+          return [companyName, contacts.map(normalizeLeadForResponse)];
+        }),
+    );
+
+    return Object.fromEntries(entries);
+  });
+
   return value;
 }
 
@@ -301,10 +351,25 @@ router.get('/employee/companies', async (req, res) => {
       cacheKey: buildEmployeeCompanyKey(companyCode, phone, req.query),
     });
 
+    const contactsByCompany = shouldIncludeCompanyContacts(req.query)
+      ? await getCachedEmployeeCompanyContacts({
+          companyCode,
+          phone,
+          query: req.query,
+          companyNames: payload.names,
+          cacheKey: buildEmployeeCompanyContactsKey(companyCode, phone, {
+            query: req.query,
+            companyNames: payload.names,
+            contactPageSize: parseContactPageSize(req.query.contactPageSize),
+          }),
+        })
+      : {};
+
     return res.status(200).json({
       success: true,
       companies: payload.companies,
       names: payload.names,
+      contactsByCompany,
       page: payload.page,
       pageSize: payload.pageSize,
       total: payload.total,

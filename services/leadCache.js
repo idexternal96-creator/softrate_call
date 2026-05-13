@@ -3,6 +3,7 @@ const { hashObject, invalidatePrefix } = require('./cacheService');
 const LEAD_CACHE_TTLS = {
   list: 45,
   facets: 120,
+  companyContacts: 86400,
 };
 
 function buildEmployeeLeadListKey(companyCode, phone, params) {
@@ -25,6 +26,10 @@ function buildEmployeeCompanyKey(companyCode, phone, params) {
   return `lead:companies:employee:${companyCode}:${phone}:${hashObject(params)}`;
 }
 
+function buildEmployeeCompanyContactsKey(companyCode, phone, params) {
+  return `lead:company-contacts:employee:${companyCode}:${phone}:${hashObject(params)}`;
+}
+
 function buildAdminCompanyKey(companyCode, params) {
   return `lead:companies:admin:${companyCode}:${hashObject(params)}`;
 }
@@ -45,6 +50,7 @@ async function invalidateLeadCaches({ companyCode, phone }) {
       `lead:list:employee:${companyCode}:${phone}:`,
       `lead:sets:employee:${companyCode}:${phone}:`,
       `lead:companies:employee:${companyCode}:${phone}:`,
+      `lead:company-contacts:employee:${companyCode}:${phone}:`,
       `lead:status-counts:employee:${companyCode}:${phone}:`,
     );
   } else {
@@ -52,6 +58,7 @@ async function invalidateLeadCaches({ companyCode, phone }) {
       `lead:list:employee:${companyCode}:`,
       `lead:sets:employee:${companyCode}:`,
       `lead:companies:employee:${companyCode}:`,
+      `lead:company-contacts:employee:${companyCode}:`,
       `lead:status-counts:employee:${companyCode}:`,
     );
   }
@@ -64,6 +71,7 @@ module.exports = {
   buildAdminCompanyKey,
   buildAdminLeadListKey,
   buildAdminSetKey,
+  buildEmployeeCompanyContactsKey,
   buildEmployeeCompanyKey,
   buildEmployeeLeadListKey,
   buildEmployeeSetKey,
