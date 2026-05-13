@@ -200,10 +200,34 @@ async function getLeadCompanies({ companyCode, phone, query = {} }) {
   ]);
 
   const total = totalRows[0]?.total || rows.length;
+  const companies = rows.map((row) => ({ name: row._id, count: row.count }));
+  const names = rows.map((row) => row._id).filter(Boolean);
+  let contactsByCompany = {};
+
+  if (query.includeContacts === 'true' && names.length) {
+    const contactPageSize = Math.min(parsePositiveInt(query.contactPageSize, pagination.pageSize), MAX_PAGE_SIZE);
+    const contacts = await Lead.find({
+      ...mongoQuery,
+      leadCompanyName: { $in: names },
+    })
+      .sort({ leadCompanyNameLower: 1, sheetOrder: 1, createdAt: 1, _id: 1 })
+      .lean();
+
+    contactsByCompany = contacts.reduce((grouped, lead) => {
+      const companyName = lead.leadCompanyName;
+      if (!companyName || !names.includes(companyName)) return grouped;
+      grouped[companyName] = grouped[companyName] || [];
+      if (grouped[companyName].length < contactPageSize) {
+        grouped[companyName].push(lead);
+      }
+      return grouped;
+    }, {});
+  }
 
   return {
-    companies: rows.map((row) => ({ name: row._id, count: row.count })),
-    names: rows.map((row) => row._id).filter(Boolean),
+    companies,
+    names,
+    contactsByCompany,
     page: pagination.page,
     pageSize: pagination.pageSize,
     total,
