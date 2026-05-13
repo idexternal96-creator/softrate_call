@@ -14,6 +14,14 @@ test('parsePagination defaults and caps page size', () => {
   assert.equal(parsed.isPaginated, true);
 });
 
+test('parsePagination keeps architecture page size for company rail requests', () => {
+  const parsed = parsePagination({ page: '1', pageSize: '20', paginated: 'true' });
+  assert.equal(parsed.page, 1);
+  assert.equal(parsed.pageSize, 20);
+  assert.equal(parsed.skip, 0);
+  assert.equal(parsed.isPaginated, true);
+});
+
 test('buildLeadSearchQuery handles phone search', () => {
   const result = buildLeadSearchQuery({
     companyCode: 'DV01',
@@ -48,4 +56,22 @@ test('buildLeadSearchQuery uses text search for longer text queries', () => {
   assert.equal(result.searchStrategy, 'text');
   assert.deepEqual(result.mongoQuery.$text, { $search: 'tile distributor mumbai' });
   assert.ok(result.projection);
+});
+
+test('buildLeadSearchQuery applies employee lead view filters', () => {
+  const result = buildLeadSearchQuery({
+    companyCode: 'DV01',
+    phone: '9999999999',
+    query: {
+      statuses: 'Interested, Converted',
+      isFavourite: 'true',
+      updatedFrom: '2026-05-13T00:00:00.000Z',
+      updatedTo: '2026-05-14T00:00:00.000Z',
+    },
+  });
+
+  assert.deepEqual(result.mongoQuery.status, { $in: ['Interested', 'Converted'] });
+  assert.equal(result.mongoQuery.isFavourite, true);
+  assert.equal(result.mongoQuery.updatedAt.$gte.toISOString(), '2026-05-13T00:00:00.000Z');
+  assert.equal(result.mongoQuery.updatedAt.$lt.toISOString(), '2026-05-14T00:00:00.000Z');
 });

@@ -1,15 +1,15 @@
 const express  = require('express');
 const router   = express.Router();
-const CallLog  = require('../models/CallLog');
-const CallDetail = require('../models/CallDetail');
-const Employee = require('../models/Employee');
-const User     = require('../models/User');
-const { getOrSet } = require('../services/cacheService');
+const CallLog  = require('../../../models/CallLog');
+const CallDetail = require('../../../models/CallDetail');
+const Employee = require('../../../models/Employee');
+const User     = require('../../../models/User');
+const { getOrSet } = require('../../../services/cacheService');
 const {
   CALLLOG_CACHE_TTLS,
   buildCalllogCacheKey,
   invalidateCalllogCaches,
-} = require('../services/calllogCache');
+} = require('../../../services/calllogCache');
 
 // Format date as YYYY-MM-DD using LOCAL time (matches what Flutter sends)
 function toDateStr(d) {

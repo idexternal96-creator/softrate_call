@@ -51,9 +51,27 @@ function buildBaseLeadQuery({ companyCode, phone, query = {} }) {
     });
   }
 
+  const statuses = String(query.statuses ?? '')
+    .split(',')
+    .map((status) => status.trim())
+    .filter(Boolean);
   const status = String(query.status ?? '').trim();
-  if (status) {
+  if (statuses.length) {
+    mongoQuery.status = { $in: statuses };
+  } else if (status) {
     mongoQuery.status = status;
+  }
+
+  if (String(query.isFavourite ?? '').trim() === 'true') {
+    mongoQuery.isFavourite = true;
+  }
+
+  const updatedFrom = String(query.updatedFrom ?? '').trim();
+  const updatedTo = String(query.updatedTo ?? '').trim();
+  if (updatedFrom || updatedTo) {
+    mongoQuery.updatedAt = {};
+    if (updatedFrom) mongoQuery.updatedAt.$gte = new Date(updatedFrom);
+    if (updatedTo) mongoQuery.updatedAt.$lt = new Date(updatedTo);
   }
 
   const company = normalizeText(query.company);
@@ -164,17 +182,32 @@ async function getLeadSets({ companyCode, phone, query = {} }) {
 }
 
 async function getLeadCompanies({ companyCode, phone, query = {} }) {
-  const mongoQuery = buildBaseLeadQuery({ companyCode, phone, query });
-  const rows = await Lead.aggregate([
+  const { mongoQuery } = buildLeadSearchQuery({ companyCode, phone, query });
+  const pagination = parsePagination(query);
+  const pipeline = [
     { $match: mongoQuery },
     { $match: { leadCompanyNameLower: { $ne: '' } } },
     { $group: { _id: '$leadCompanyName', count: { $sum: 1 } } },
     { $sort: { count: -1, _id: 1 } },
+  ];
+
+  const [totalRows, rows] = await Promise.all([
+    Lead.aggregate([...pipeline, { $count: 'total' }]),
+    Lead.aggregate([
+      ...pipeline,
+      ...(pagination.isPaginated ? [{ $skip: pagination.skip }, { $limit: pagination.pageSize }] : []),
+    ]),
   ]);
+
+  const total = totalRows[0]?.total || rows.length;
 
   return {
     companies: rows.map((row) => ({ name: row._id, count: row.count })),
     names: rows.map((row) => row._id).filter(Boolean),
+    page: pagination.page,
+    pageSize: pagination.pageSize,
+    total,
+    hasMore: pagination.isPaginated ? pagination.page * pagination.pageSize < total : false,
   };
 }
 

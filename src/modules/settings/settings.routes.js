@@ -1,12 +1,12 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://calluserfrontend.netlify.app';
-const User = require('../models/User');
+const User = require('../../../models/User');
 const { 
   notifyAdminOfRequest, 
   notifyAdminOfRmRequest,
   sendResetPasswordEmail
-} = require('../services/mailService');
+} = require('../../../services/mailService');
 const crypto = require('crypto');
 
 const router = express.Router();

@@ -2,8 +2,8 @@ const express = require('express');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const Razorpay = require('razorpay');
-const User = require('../models/User');
-const Payment = require('../models/Payment');
+const User = require('../../../models/User');
+const Payment = require('../../../models/Payment');
 
 const router = express.Router();
 

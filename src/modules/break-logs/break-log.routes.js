@@ -1,6 +1,6 @@
 const express = require('express');
-const BreakLog = require('../models/BreakLog');
-const User = require('../models/User');
+const BreakLog = require('../../../models/BreakLog');
+const User = require('../../../models/User');
 const router = express.Router();
 
 // Helper — today's date string in IST (YYYY-MM-DD)

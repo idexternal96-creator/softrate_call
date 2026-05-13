@@ -1,8 +1,9 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const Invoice = require('../models/Invoice');
-const Lead = require('../models/Lead');
-const User = require('../models/User');
+const Invoice = require('../../../models/Invoice');
+const Lead = require('../../../models/Lead');
+const User = require('../../../models/User');
+const { parsePageQuery, buildPageResponse } = require('../../common/pagination/pagination');
 
 const router = express.Router();
 
@@ -189,8 +190,32 @@ router.get('/', async (req, res) => {
       }
     }
 
-    const invoices = await Invoice.find(filter).sort({ invoiceDate: -1, createdAt: -1 }).limit(300).lean();
-    return res.json({ success: true, invoices });
+    const pagination = parsePageQuery(req.query);
+    const [total, invoices] = await Promise.all([
+      Invoice.countDocuments(filter),
+      Invoice.find(filter)
+        .sort({ invoiceDate: -1, createdAt: -1 })
+        .skip(pagination.isPaginated ? pagination.skip : 0)
+        .limit(pagination.isPaginated ? pagination.pageSize : 300)
+        .lean(),
+    ]);
+
+    const page = buildPageResponse({
+      items: invoices,
+      total,
+      page: pagination.page,
+      pageSize: pagination.isPaginated ? pagination.pageSize : invoices.length,
+    });
+
+    return res.json({
+      success: true,
+      invoices: page.items,
+      items: page.items,
+      page: page.page,
+      pageSize: page.pageSize,
+      total: page.total,
+      hasMore: page.hasMore,
+    });
   } catch (err) {
     console.error('List invoices error:', err);
     return res.status(500).json({ success: false, message: 'Failed to fetch invoices.' });

@@ -1,7 +1,7 @@
 const express = require('express');
-const Lead = require('../models/Lead');
-const eventBus = require('../services/eventBus');
-const { getOrSet } = require('../services/cacheService');
+const Lead = require('../../../models/Lead');
+const eventBus = require('../../../services/eventBus');
+const { getOrSet } = require('../../../services/cacheService');
 const {
   LEAD_CACHE_TTLS,
   buildAdminCompanyKey,
@@ -12,23 +12,23 @@ const {
   buildEmployeeSetKey,
   buildEmployeeStatusCountKey,
   invalidateLeadCaches,
-} = require('../services/leadCache');
-const { logChange } = require('../services/historyService');
+} = require('../../../services/leadCache');
+const { logChange } = require('../../../services/historyService');
 const {
   createLeadImportBatch,
   getLeadImportBatch,
   processLeadImportBatch,
-} = require('../services/leadImportService');
-const { canUseQueue, queueLeadImportJob } = require('../services/leadImportQueue');
+} = require('../../../services/leadImportService');
+const { canUseQueue, queueLeadImportJob } = require('../../../services/leadImportQueue');
 const {
   buildLeadSearchQuery,
   getLeadCompanies,
   getLeadSets,
   parsePagination,
-} = require('../services/leadQueryService');
-const { enrichLeadForStorage, normalizeRemarks, normalizeText } = require('../services/leadNormalization');
-const { getAiBriefForLead } = require('../services/ai/researchWorkflow');
-const { getAiSuggestionForLead } = require('../services/ai/suggestionWorkflow');
+} = require('../../../services/leadQueryService');
+const { enrichLeadForStorage, normalizeRemarks, normalizeText } = require('../../../services/leadNormalization');
+const { getAiBriefForLead } = require('../../../services/ai/researchWorkflow');
+const { getAiSuggestionForLead } = require('../../../services/ai/suggestionWorkflow');
 
 const router = express.Router();
 
@@ -65,9 +65,6 @@ async function getCachedLeadSets({ companyCode, phone, cacheKey }) {
 async function getCachedLeadCompanies({ companyCode, phone, query, cacheKey }) {
   const companiesQuery = { ...query };
   delete companiesQuery.company;
-  delete companiesQuery.page;
-  delete companiesQuery.pageSize;
-  delete companiesQuery.paginated;
   delete companiesQuery.sort;
   delete companiesQuery.includeFacets;
 
@@ -304,7 +301,15 @@ router.get('/employee/companies', async (req, res) => {
       cacheKey: buildEmployeeCompanyKey(companyCode, phone, req.query),
     });
 
-    return res.status(200).json({ success: true, companies: payload.companies, names: payload.names });
+    return res.status(200).json({
+      success: true,
+      companies: payload.companies,
+      names: payload.names,
+      page: payload.page,
+      pageSize: payload.pageSize,
+      total: payload.total,
+      hasMore: payload.hasMore,
+    });
   } catch (err) {
     console.error('[get employee companies]', err);
     return res.status(500).json({ success: false, message: 'Server error fetching companies.' });
@@ -407,7 +412,15 @@ router.get('/admin/companies', async (req, res) => {
       cacheKey: buildAdminCompanyKey(companyCode, req.query),
     });
 
-    return res.status(200).json({ success: true, companies: payload.companies, names: payload.names });
+    return res.status(200).json({
+      success: true,
+      companies: payload.companies,
+      names: payload.names,
+      page: payload.page,
+      pageSize: payload.pageSize,
+      total: payload.total,
+      hasMore: payload.hasMore,
+    });
   } catch (err) {
     console.error('[get admin companies]', err);
     return res.status(500).json({ success: false, message: 'Server error fetching companies.' });

@@ -1,9 +1,9 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const Admin = require('../models/Admin');
-const Payment = require('../models/Payment');
-const { notifyCompanyOfApproval, notifyCompanyOfRejection } = require('../services/mailService');
+const User = require('../../../models/User');
+const Admin = require('../../../models/Admin');
+const Payment = require('../../../models/Payment');
+const { notifyCompanyOfApproval, notifyCompanyOfRejection } = require('../../../services/mailService');
 
 const router = express.Router();
 

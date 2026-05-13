@@ -1,5 +1,5 @@
 const express = require('express');
-const Employee = require('../models/Employee');
+const Employee = require('../../../models/Employee');
 const router = express.Router();
 
 // GET employees for a given company code
@@ -73,7 +73,7 @@ router.patch('/:id/tags', async (req, res) => {
 
     // Add new tags to the company profile uniquely
     if (companyCode) {
-      const User = require('../models/User');
+      const User = require('../../../models/User');
       await User.findOneAndUpdate(
         { companyCode },
         { $addToSet: { tags: { $each: tags } } }

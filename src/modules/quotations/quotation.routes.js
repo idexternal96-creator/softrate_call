@@ -1,8 +1,9 @@
 const express = require('express');
 const mongoose = require('mongoose');
-const Quotation = require('../models/Quotation');
-const Lead = require('../models/Lead');
-const User = require('../models/User');
+const Quotation = require('../../../models/Quotation');
+const Lead = require('../../../models/Lead');
+const User = require('../../../models/User');
+const { parsePageQuery, buildPageResponse } = require('../../common/pagination/pagination');
 
 const router = express.Router();
 
@@ -144,8 +145,32 @@ router.get('/', async (req, res) => {
       }
     }
 
-    const quotations = await Quotation.find(filter).sort({ quotationDate: -1, createdAt: -1 }).limit(300).lean();
-    return res.json({ success: true, quotations });
+    const pagination = parsePageQuery(req.query);
+    const [total, quotations] = await Promise.all([
+      Quotation.countDocuments(filter),
+      Quotation.find(filter)
+        .sort({ quotationDate: -1, createdAt: -1 })
+        .skip(pagination.isPaginated ? pagination.skip : 0)
+        .limit(pagination.isPaginated ? pagination.pageSize : 300)
+        .lean(),
+    ]);
+
+    const page = buildPageResponse({
+      items: quotations,
+      total,
+      page: pagination.page,
+      pageSize: pagination.isPaginated ? pagination.pageSize : quotations.length,
+    });
+
+    return res.json({
+      success: true,
+      quotations: page.items,
+      items: page.items,
+      page: page.page,
+      pageSize: page.pageSize,
+      total: page.total,
+      hasMore: page.hasMore,
+    });
   } catch (err) {
     console.error('List quotations error:', err);
     return res.status(500).json({ success: false, message: 'Failed to fetch quotations.' });

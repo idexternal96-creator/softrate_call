@@ -1,5 +1,5 @@
 const express = require('express');
-const History = require('../models/History');
+const History = require('../../../models/History');
 const router = express.Router();
 
 // GET — fetch history for a specific company/lead

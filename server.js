@@ -45,8 +45,8 @@ app.get('/', (req, res) => {
   res.json({ message: 'Softrate Record Backend is running 🚀', status: 'OK' });
 });
 
-// Auth routes
-app.use('/api/auth', require('./routes/auth'));
+// Auth/settings routes
+app.use('/api/auth', require('./src/modules/settings/settings.routes'));
 
 const cron = require('node-cron');
 const User = require('./models/User');
@@ -80,34 +80,34 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 // Admin routes
-app.use('/api/admin', require('./routes/admin'));
+app.use('/api/admin', require('./src/modules/admin/admin.routes'));
 
 // Employee routes
-app.use('/api/employees', require('./routes/employee'));
+app.use('/api/employees', require('./src/modules/employees/employee.routes'));
 
-// Bookmark routes
-app.use('/api/bookmarks', require('./routes/bookmark'));
+// Follow-up/bookmark routes
+app.use('/api/bookmarks', require('./src/modules/follow-ups/follow-up.routes'));
 
 // Payment routes
-app.use('/api/payment', require('./routes/payment'));
+app.use('/api/payment', require('./src/modules/payments/payment.routes'));
 
-// CallLog routes
-app.use('/api/calllogs', require('./routes/calllog'));
+// Report/call log routes
+app.use('/api/calllogs', require('./src/modules/reports/report.routes'));
 
 // Lead routes
-app.use('/api/leads', require('./routes/lead'));
+app.use('/api/leads', require('./src/modules/leads/lead.routes'));
 
 // Invoice routes
-app.use('/api/invoices', require('./routes/invoice'));
+app.use('/api/invoices', require('./src/modules/invoices/invoice.routes'));
 
 // Quotation routes
-app.use('/api/quotations', require('./routes/quotation'));
+app.use('/api/quotations', require('./src/modules/quotations/quotation.routes'));
 
 // Break log routes
-app.use('/api/breaklog', require('./routes/breaklog'));
+app.use('/api/breaklog', require('./src/modules/break-logs/break-log.routes'));
 
 // History routes
-app.use('/api/history', require('./routes/history'));
+app.use('/api/history', require('./src/modules/history/history.routes'));
 
 // ── Real-time SSE events endpoint ────────────────────────────
 const eventBus = require('./services/eventBus');

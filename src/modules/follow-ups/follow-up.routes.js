@@ -1,7 +1,7 @@
 const express = require('express');
-const Bookmark = require('../models/Bookmark');
-const eventBus = require('../services/eventBus');
-const { logChange } = require('../services/historyService');
+const Bookmark = require('../../../models/Bookmark');
+const eventBus = require('../../../services/eventBus');
+const { logChange } = require('../../../services/historyService');
 const router = express.Router();
 
 // POST — create or update a bookmark (Follow-up)
