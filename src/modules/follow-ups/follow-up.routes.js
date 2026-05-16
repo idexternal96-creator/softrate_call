@@ -4,6 +4,48 @@ const eventBus = require('../../../services/eventBus');
 const { logChange } = require('../../../services/historyService');
 const router = express.Router();
 
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function buildAdminBookmarkQuery(query) {
+  const { companyCode, search, filter, reminderDate } = query;
+  const mongoQuery = { companyCode };
+
+  const activeDate = reminderDate || (filter === 'today' ? new Date().toISOString().slice(0, 10) : '');
+  if (activeDate) {
+    const start = new Date(`${activeDate}T00:00:00.000Z`);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 1);
+    mongoQuery.reminderDate = { $gte: start, $lt: end };
+  }
+
+  if (search && String(search).trim()) {
+    const pattern = new RegExp(escapeRegex(search.trim()), 'i');
+    mongoQuery.$or = [
+      { contactName: pattern },
+      { contactNumber: pattern },
+      { companyName: pattern },
+      { description: pattern },
+      { remarks: pattern },
+    ];
+  }
+
+  return mongoQuery;
+}
+
+function groupBookmarksByCompany(bookmarks) {
+  const counts = new Map();
+  bookmarks.forEach((bookmark) => {
+    const company = bookmark.companyName || 'Unnamed Company';
+    counts.set(company, (counts.get(company) || 0) + 1);
+  });
+
+  return Array.from(counts.entries())
+    .map(([company, count]) => ({ company, name: company, count }))
+    .sort((a, b) => a.company.localeCompare(b.company));
+}
+
 // POST — create or update a bookmark (Follow-up)
 router.post('/', async (req, res) => {
   try {
@@ -99,8 +141,20 @@ router.get('/admin', async (req, res) => {
     if (!companyCode) {
       return res.status(400).json({ success: false, message: 'companyCode is required.' });
     }
-    const bookmarks = await Bookmark.find({ companyCode }).sort({ reminderDate: 1 });
-    return res.status(200).json({ success: true, bookmarks });
+    const query = buildAdminBookmarkQuery(req.query);
+    const bookmarks = await Bookmark.find(query).sort({ reminderDate: 1, createdAt: -1 }).lean();
+    const companies = groupBookmarksByCompany(bookmarks);
+
+    return res.status(200).json({
+      success: true,
+      bookmarks,
+      companies,
+      page: 1,
+      pageSize: companies.length,
+      total: companies.length,
+      totalBookmarks: bookmarks.length,
+      hasMore: false,
+    });
   } catch (err) {
     console.error('[get admin bookmarks]', err);
     return res.status(500).json({ success: false, message: 'Server error fetching company bookmarks.' });

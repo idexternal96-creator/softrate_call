@@ -87,6 +87,40 @@ router.patch('/:id/tags', async (req, res) => {
   }
 });
 
+// PATCH employee profile photo
+router.patch('/:id/profile-photo', async (req, res) => {
+  try {
+    const { profilePhoto } = req.body;
+    if (typeof profilePhoto !== 'string' || !profilePhoto.trim()) {
+      return res.status(400).json({ success: false, message: 'Profile photo is required.' });
+    }
+
+    const trimmedPhoto = profilePhoto.trim();
+    if (!/^data:image\/(png|jpe?g|webp);base64,/i.test(trimmedPhoto)) {
+      return res.status(400).json({ success: false, message: 'Profile photo must be a PNG, JPG, or WEBP data URL.' });
+    }
+
+    if (trimmedPhoto.length > 2_500_000) {
+      return res.status(400).json({ success: false, message: 'Profile photo is too large after processing.' });
+    }
+
+    const employee = await Employee.findByIdAndUpdate(
+      req.params.id,
+      { $set: { profilePhoto: trimmedPhoto } },
+      { returnDocument: 'after' }
+    );
+
+    if (!employee) {
+      return res.status(404).json({ success: false, message: 'Employee not found.' });
+    }
+
+    return res.status(200).json({ success: true, employee, message: 'Profile photo updated successfully.' });
+  } catch (err) {
+    console.error('[patch employee profile photo]', err);
+    return res.status(500).json({ success: false, message: 'Server error updating profile photo.' });
+  }
+});
+
 // PUT update employee details
 router.put('/:id', async (req, res) => {
   try {

@@ -6,6 +6,7 @@ const employeeSchema = new mongoose.Schema({
   mobile:       { type: String, required: true, trim: true },
   companyCode:  { type: String, required: true, index: true },
   employeeCode: { type: String, default: '' },  // Optional — set by employee in app
+  profilePhoto: { type: String, default: '' },
   tags:         [{ type: String }],
   // Device info (updated on each sync from Flutter)
   deviceModel:  { type: String, default: '' },
