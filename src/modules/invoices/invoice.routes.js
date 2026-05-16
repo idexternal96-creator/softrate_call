@@ -11,6 +11,14 @@ function normalize(value) {
   return String(value || '').trim();
 }
 
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizePaymentStatus(value) {
+  return normalize(value).toLowerCase() === 'paid' ? 'paid' : 'unpaid';
+}
+
 function getConvertedStatuses(user) {
   const configured = Array.isArray(user?.convertedPageStatuses) ? user.convertedPageStatuses : [];
   return configured.length ? configured : ['Converted'];
@@ -22,16 +30,56 @@ function isConvertedLead(lead, user) {
     .includes(normalize(lead?.status).toLowerCase());
 }
 
-async function generateInvoiceNumber(companyCode, invoiceDate) {
+function parseInvoiceSeries(invoiceNumber) {
+  const match = normalize(invoiceNumber).match(/^(Invoice_\d{4}\d{3})_v(\d+)$/);
+  if (!match) return null;
+  return {
+    base: match[1],
+    sequence: Number(match[1].slice(-3)),
+    version: Number(match[2] || 1),
+  };
+}
+
+function buildCompanyInvoiceFilter(companyCode, lead) {
+  const conditions = [];
+  if (lead?._id) conditions.push({ leadId: lead._id });
+  const leadCompanyName = normalize(lead?.leadCompanyName);
+  if (leadCompanyName) {
+    conditions.push({ leadCompanyName: new RegExp(`^${escapeRegex(leadCompanyName)}$`, 'i') });
+  }
+  return conditions.length ? { companyCode, $or: conditions } : { companyCode };
+}
+
+async function generateInvoiceNumber(companyCode, lead, invoiceDate) {
+  const existingInvoice = await Invoice.findOne(buildCompanyInvoiceFilter(companyCode, lead))
+    .sort({ versionNo: -1, createdAt: -1 })
+    .select('invoiceNumber versionNo')
+    .lean();
+  const existingSeries = parseInvoiceSeries(existingInvoice?.invoiceNumber);
+  if (existingSeries) {
+    const nextVersion = Math.max(Number(existingInvoice?.versionNo || 0), existingSeries.version) + 1;
+    return {
+      invoiceNumber: `${existingSeries.base}_v${nextVersion}`,
+      versionNo: nextVersion,
+    };
+  }
+
   const date = invoiceDate ? new Date(invoiceDate) : new Date();
   const yy = String(date.getFullYear()).slice(-2);
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   const prefix = `Invoice_${yy}${mm}`;
-  const count = await Invoice.countDocuments({
+  const existingMonthInvoices = await Invoice.find({
     companyCode,
     invoiceNumber: new RegExp(`^${prefix}\\d{3}_v\\d+$`),
-  });
-  return `${prefix}${String(count + 1).padStart(3, '0')}_v1`;
+  }).select('invoiceNumber').lean();
+  const maxSequence = existingMonthInvoices.reduce((max, record) => {
+    const parsed = parseInvoiceSeries(record?.invoiceNumber);
+    return parsed ? Math.max(max, parsed.sequence) : max;
+  }, 0);
+  return {
+    invoiceNumber: `${prefix}${String(maxSequence + 1).padStart(3, '0')}_v1`,
+    versionNo: 1,
+  };
 }
 
 function buildLineItems(rawItems, gstPercentage) {
@@ -107,7 +155,7 @@ router.post('/', async (req, res) => {
     const subtotal = items.reduce((sum, item) => sum + item.taxable, 0);
     const gstAmount = items.reduce((sum, item) => sum + item.cgst + item.sgst, 0);
     const invoiceDate = req.body.invoiceDate ? new Date(req.body.invoiceDate) : new Date();
-    const invoiceNumber = await generateInvoiceNumber(companyCode, invoiceDate);
+    const { invoiceNumber, versionNo } = await generateInvoiceNumber(companyCode, lead, invoiceDate);
 
     const invoice = await Invoice.create({
       companyCode,
@@ -119,7 +167,7 @@ router.post('/', async (req, res) => {
       contactNumber: lead.contactNumber,
       directorEmailAddress: lead.directorEmailAddress,
       invoiceNumber,
-      versionNo: 1,
+      versionNo,
       items,
       subtotal,
       gstPercentage,
@@ -129,6 +177,7 @@ router.post('/', async (req, res) => {
       total: subtotal + gstAmount,
       invoiceDate,
       dueDate: req.body.dueDate ? new Date(req.body.dueDate) : null,
+      paymentStatus: normalizePaymentStatus(req.body.paymentStatus),
       createdByRole: req.body.createdByRole === 'admin' ? 'admin' : 'employee',
       createdByName: normalize(req.body.createdByName || req.body.employeeName),
       createdByPhone: normalize(req.body.createdByPhone || req.body.employeePhone),

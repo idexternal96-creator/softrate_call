@@ -32,6 +32,7 @@ const invoiceSchema = new mongoose.Schema({
   total: { type: Number, default: 0 },
   invoiceDate: { type: Date, default: Date.now, index: true },
   dueDate: { type: Date, default: null },
+  paymentStatus: { type: String, enum: ['paid', 'unpaid'], default: 'unpaid' },
   createdByRole: { type: String, enum: ['employee', 'admin'], default: 'employee' },
   createdByName: { type: String, default: '' },
   createdByPhone: { type: String, default: '' },

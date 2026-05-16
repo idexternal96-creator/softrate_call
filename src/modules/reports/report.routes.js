@@ -11,37 +11,45 @@ const {
   invalidateCalllogCaches,
 } = require('../../../services/calllogCache');
 
-// Format date as YYYY-MM-DD using LOCAL time (matches what Flutter sends)
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Format date as YYYY-MM-DD in IST (matches the mobile sync date field).
 function toDateStr(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
 
+function todayIST() {
+  return toDateStr(new Date(Date.now() + IST_OFFSET_MS));
+}
+
+function addDays(dateStr, days) {
+  const [year, month, day] = String(dateStr).split('-').map(Number);
+  if (!year || !month || !day) return todayIST();
+  return toDateStr(new Date(Date.UTC(year, month - 1, day) + (days * DAY_MS)));
+}
+
 function dateRange(label) {
-  const now   = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // local midnight
-  if (label === 'today') return [toDateStr(today), toDateStr(today)];
+  const today = todayIST();
+  if (label === 'today') return [today, today];
   if (label === 'yesterday') {
-    const y = new Date(today); y.setDate(y.getDate() - 1);
-    return [toDateStr(y), toDateStr(y)];
+    const yesterday = addDays(today, -1);
+    return [yesterday, yesterday];
   }
   if (label === 'lastweek') {
-    // Return a rolling 7-day window (today - 6 days to today)
-    const start = new Date(today); 
-    start.setDate(today.getDate() - 6);
-    return [toDateStr(start), toDateStr(today)];
+    return [addDays(today, -6), today];
   }
-  return [toDateStr(today), toDateStr(today)];
+  return [today, today];
 }
 
 // Resolve date range from request: custom from/to takes priority
 function resolveRange(query) {
   const { period = 'today', from, to } = query;
   if (from) {
-    const now = new Date();
-    return [from, to || toDateStr(new Date(now.getFullYear(), now.getMonth(), now.getDate()))];
+    return [from, to || todayIST()];
   }
   return dateRange(period);
 }

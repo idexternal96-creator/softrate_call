@@ -23,16 +23,50 @@ async function findLead(body) {
   return null;
 }
 
-async function generateQuotationNumber(companyCode, quotationDate) {
+function parseQuotationNumber(value) {
+  const raw = normalize(value);
+  const match = raw.match(/^(.+?)(?:_v(\d+))?$/i);
+  return {
+    base: match ? match[1] : raw,
+    version: Number(match?.[2] || 1),
+  };
+}
+
+async function generateQuotationNumber(companyCode, lead, quotationDate) {
+  const leadCompanyName = normalize(lead?.leadCompanyName);
+  const latestCompanyQuotation = leadCompanyName
+    ? await Quotation.findOne({ companyCode, leadCompanyName })
+        .sort({ versionNo: -1, createdAt: -1 })
+        .select('quotationNumber versionNo')
+        .lean()
+    : null;
+
+  if (latestCompanyQuotation?.quotationNumber) {
+    const parsed = parseQuotationNumber(latestCompanyQuotation.quotationNumber);
+    const nextVersion = Math.max(Number(latestCompanyQuotation.versionNo || 0), parsed.version) + 1;
+    return {
+      quotationNumber: `${parsed.base}_v${nextVersion}`,
+      versionNo: nextVersion,
+    };
+  }
+
   const date = quotationDate ? new Date(quotationDate) : new Date();
   const yy = String(date.getFullYear()).slice(-2);
   const mm = String(date.getMonth() + 1).padStart(2, '0');
   const prefix = `QT-${yy}${mm}`;
-  const count = await Quotation.countDocuments({
+  const existingQuotations = await Quotation.find({
     companyCode,
-    quotationNumber: new RegExp(`^${prefix}\\d{3}$`),
-  });
-  return `${prefix}${String(count + 1).padStart(3, '0')}`;
+    quotationNumber: new RegExp(`^${prefix}\\d{3}(?:_v\\d+)?$`, 'i'),
+  }).select('quotationNumber').lean();
+  const maxSequence = existingQuotations.reduce((max, quotation) => {
+    const match = normalize(quotation.quotationNumber).match(new RegExp(`^${prefix}(\\d{3})(?:_v\\d+)?$`, 'i'));
+    return Math.max(max, Number(match?.[1] || 0));
+  }, 0);
+  const base = `${prefix}${String(maxSequence + 1).padStart(3, '0')}`;
+  return {
+    quotationNumber: `${base}_v1`,
+    versionNo: 1,
+  };
 }
 
 function buildItems(rawItems, gstPercentage) {
@@ -75,7 +109,7 @@ router.post('/', async (req, res) => {
     const subtotal = items.reduce((sum, item) => sum + item.taxable, 0);
     const gstAmount = items.reduce((sum, item) => sum + item.gst, 0);
     const quotationDate = req.body.quotationDate ? new Date(req.body.quotationDate) : new Date();
-    const quotationNumber = await generateQuotationNumber(companyCode, quotationDate);
+    const { quotationNumber, versionNo } = await generateQuotationNumber(companyCode, lead, quotationDate);
 
     const quotation = await Quotation.create({
       companyCode,
@@ -87,6 +121,8 @@ router.post('/', async (req, res) => {
       contactNumber: lead.contactNumber,
       directorEmailAddress: lead.directorEmailAddress,
       quotationNumber,
+      versionNo,
+      kindNote: normalize(req.body.kindNote || user.invoiceFooter || 'We aim to provide the best software to automate your business with high quality at affordable cost.'),
       items,
       subtotal,
       gstPercentage,

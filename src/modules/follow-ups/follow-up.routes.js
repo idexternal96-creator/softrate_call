@@ -95,11 +95,90 @@ router.post('/', async (req, res) => {
 // GET — fetch all bookmarks for a company (Admin view)
 router.get('/admin', async (req, res) => {
   try {
-    const { companyCode } = req.query;
+    const { companyCode, paginated, search, filter, reminderDate } = req.query;
     if (!companyCode) {
       return res.status(400).json({ success: false, message: 'companyCode is required.' });
     }
-    const bookmarks = await Bookmark.find({ companyCode }).sort({ reminderDate: 1 });
+
+    const query = { companyCode };
+    if (filter === 'today') {
+      const today = new Date().toISOString().slice(0, 10);
+      query.reminderDate = { $regex: `^${today}` };
+    }
+    if (reminderDate) {
+      query.reminderDate = { $regex: `^${String(reminderDate).slice(0, 10)}` };
+    }
+    if (search) {
+      const pattern = new RegExp(String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      query.$or = [
+        { contactName: pattern },
+        { contactNumber: pattern },
+        { companyName: pattern },
+        { description: pattern },
+        { remarks: pattern },
+      ];
+    }
+
+    if (paginated === 'true' || paginated === true) {
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const pageSize = Math.min(Math.max(parseInt(req.query.pageSize, 10) || 40, 1), 100);
+
+      const companies = await Bookmark.aggregate([
+        { $match: query },
+        { $group: { _id: { $ifNull: ['$companyName', 'Unnamed Company'] }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+        {
+          $facet: {
+            data: [{ $skip: (page - 1) * pageSize }, { $limit: pageSize }],
+            total: [{ $count: 'count' }],
+          },
+        },
+      ]);
+
+      const groups = companies?.[0]?.data || [];
+      const total = companies?.[0]?.total?.[0]?.count || 0;
+      const namedCompanyNames = groups
+        .map((group) => String(group._id || '').trim())
+        .filter((name) => name && name !== 'Unnamed Company');
+      const includesUnnamed = groups.some((group) => {
+        const name = String(group._id || '').trim();
+        return !name || name === 'Unnamed Company';
+      });
+      const companyFilters = [];
+
+      if (namedCompanyNames.length) {
+        companyFilters.push({ companyName: { $in: namedCompanyNames } });
+      }
+      if (includesUnnamed) {
+        companyFilters.push(
+          { companyName: { $exists: false } },
+          { companyName: null },
+          { companyName: '' },
+          { companyName: { $regex: '^\\s*$' } },
+        );
+      }
+
+      const bookmarkQuery = { ...query };
+      if (companyFilters.length) {
+        bookmarkQuery.$and = [...(bookmarkQuery.$and || []), { $or: companyFilters }];
+      }
+
+      const bookmarks = companyFilters.length
+        ? await Bookmark.find(bookmarkQuery).sort({ companyName: 1, reminderDate: 1 }).lean()
+        : [];
+
+      return res.status(200).json({
+        success: true,
+        bookmarks,
+        companies: groups.map((group) => ({ company: group._id || 'Unnamed Company', name: group._id || 'Unnamed Company', count: group.count })),
+        page,
+        pageSize,
+        total,
+        hasMore: page * pageSize < total,
+      });
+    }
+
+    const bookmarks = await Bookmark.find(query).sort({ reminderDate: 1 });
     return res.status(200).json({ success: true, bookmarks });
   } catch (err) {
     console.error('[get admin bookmarks]', err);

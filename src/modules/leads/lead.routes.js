@@ -1,5 +1,6 @@
 const express = require('express');
 const Lead = require('../../../models/Lead');
+const LeadCompanyProfile = require('../../../models/LeadCompanyProfile');
 const eventBus = require('../../../services/eventBus');
 const { getOrSet } = require('../../../services/cacheService');
 const {
@@ -52,6 +53,26 @@ function buildLeadListResponse({ items, total, page, pageSize, sets, companies, 
     sets,
     companies,
     cache: cacheHit ? 'hit' : 'miss',
+  };
+}
+
+function mapCompanyProfile(profile, companyName = '') {
+  return {
+    leadCompanyName: String(profile?.leadCompanyName || companyName || '').trim(),
+    alternatePhone: String(profile?.alternatePhone || '').trim(),
+    alternateEmail: String(profile?.alternateEmail || '').trim(),
+    notes: Array.isArray(profile?.notes)
+      ? profile.notes
+          .map((note) => ({
+            _id: String(note?._id || ''),
+            text: String(note?.text || '').trim(),
+            createdAt: note?.createdAt || null,
+          }))
+          .filter((note) => note.text)
+          .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+      : [],
+    updatedAt: profile?.updatedAt || null,
+    createdAt: profile?.createdAt || null,
   };
 }
 
@@ -495,6 +516,104 @@ router.post('/admin/delete-set', async (req, res) => {
   } catch (err) {
     console.error('[admin delete set leads]', err);
     return res.status(500).json({ success: false, message: 'Server error deleting admin set.' });
+  }
+});
+
+router.get('/company-profile', async (req, res) => {
+  try {
+    const companyCode = String(req.query.companyCode || '').trim();
+    const companyName = String(req.query.companyName || '').trim();
+    if (!companyCode || !companyName) {
+      return res.status(400).json({ success: false, message: 'companyCode and companyName are required.' });
+    }
+
+    const profile = await LeadCompanyProfile.findOne({
+      companyCode,
+      normalizedCompanyName: normalizeText(companyName),
+    }).lean();
+
+    return res.status(200).json({
+      success: true,
+      profile: mapCompanyProfile(profile, companyName),
+    });
+  } catch (err) {
+    console.error('[get company profile]', err);
+    return res.status(500).json({ success: false, message: 'Server error fetching company profile.' });
+  }
+});
+
+router.patch('/company-profile', async (req, res) => {
+  try {
+    const companyCode = String(req.body.companyCode || '').trim();
+    const companyName = String(req.body.companyName || '').trim();
+    if (!companyCode || !companyName) {
+      return res.status(400).json({ success: false, message: 'companyCode and companyName are required.' });
+    }
+
+    const payload = {
+      companyCode,
+      leadCompanyName: companyName,
+      normalizedCompanyName: normalizeText(companyName),
+      alternatePhone: String(req.body.alternatePhone || '').trim(),
+      alternateEmail: String(req.body.alternateEmail || '').trim(),
+    };
+
+    const profile = await LeadCompanyProfile.findOneAndUpdate(
+      { companyCode, normalizedCompanyName: payload.normalizedCompanyName },
+      { $set: payload, $setOnInsert: { notes: [] } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ).lean();
+
+    return res.status(200).json({
+      success: true,
+      profile: mapCompanyProfile(profile, companyName),
+    });
+  } catch (err) {
+    console.error('[patch company profile]', err);
+    return res.status(500).json({ success: false, message: 'Server error saving company profile.' });
+  }
+});
+
+router.post('/company-profile/notes', async (req, res) => {
+  try {
+    const companyCode = String(req.body.companyCode || '').trim();
+    const companyName = String(req.body.companyName || '').trim();
+    const noteText = String(req.body.note || '').trim();
+    if (!companyCode || !companyName) {
+      return res.status(400).json({ success: false, message: 'companyCode and companyName are required.' });
+    }
+    if (!noteText) {
+      return res.status(400).json({ success: false, message: 'note is required.' });
+    }
+
+    const note = {
+      _id: undefined,
+      text: noteText,
+      createdAt: new Date(),
+    };
+
+    const profile = await LeadCompanyProfile.findOneAndUpdate(
+      { companyCode, normalizedCompanyName: normalizeText(companyName) },
+      {
+        $setOnInsert: {
+          companyCode,
+          leadCompanyName: companyName,
+          normalizedCompanyName: normalizeText(companyName),
+          alternatePhone: '',
+          alternateEmail: '',
+        },
+        $push: { notes: note },
+      },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ).lean();
+
+    return res.status(201).json({
+      success: true,
+      profile: mapCompanyProfile(profile, companyName),
+    });
+  } catch (err) {
+    console.error('[post company profile note]', err);
+    return res.status(500).json({ success: false, message: 'Server error saving company note.' });
   }
 });
 

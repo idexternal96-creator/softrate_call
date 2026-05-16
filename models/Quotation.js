@@ -20,6 +20,8 @@ const quotationSchema = new mongoose.Schema({
   contactNumber: { type: String, default: '' },
   directorEmailAddress: { type: String, default: '' },
   quotationNumber: { type: String, required: true, unique: true },
+  versionNo: { type: Number, default: 1 },
+  kindNote: { type: String, default: '' },
   items: { type: [quotationItemSchema], default: [] },
   subtotal: { type: Number, default: 0 },
   gstPercentage: { type: Number, default: 18 },
