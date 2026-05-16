@@ -158,6 +158,10 @@ router.get('/', async (req, res) => {
     const filter = { companyCode };
     const employeePhone = normalize(req.query.employeePhone);
     if (employeePhone) filter.employeePhone = employeePhone;
+    const leadId = normalize(req.query.leadId);
+    if (leadId && mongoose.Types.ObjectId.isValid(leadId)) {
+      filter.leadId = new mongoose.Types.ObjectId(leadId);
+    }
 
     const search = normalize(req.query.search);
     if (search) {
