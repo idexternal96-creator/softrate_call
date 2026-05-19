@@ -98,27 +98,34 @@ async function getCachedEmployeeCompanyContacts({ companyCode, phone, query, com
   delete contactQuery.includeFacets;
 
   const { value } = await getOrSet(cacheKey, LEAD_CACHE_TTLS.companyContacts, async () => {
-    const entries = await Promise.all(
-      companyNames
-        .filter(Boolean)
-        .map(async (companyName) => {
-          const { mongoQuery, projection, sort } = buildLeadSearchQuery({
-            companyCode,
-            phone,
-            query: {
-              ...contactQuery,
-              company: companyName,
-            },
-          });
-          const contacts = await Lead.find(mongoQuery, projection)
-            .sort(sort)
-            .limit(contactPageSize)
-            .lean();
-          return [companyName, contacts.map(normalizeLeadForResponse)];
-        }),
-    );
+    const requestedCompanies = companyNames
+      .map((companyName) => String(companyName || '').trim())
+      .filter(Boolean);
+    const companyKeys = Array.from(new Set(requestedCompanies.map(normalizeText).filter(Boolean)));
+    const contactsByCompany = Object.fromEntries(requestedCompanies.map((companyName) => [companyName, []]));
 
-    return Object.fromEntries(entries);
+    if (!companyKeys.length) return contactsByCompany;
+
+    const { mongoQuery } = buildLeadSearchQuery({
+      companyCode,
+      phone,
+      query: contactQuery,
+    });
+    mongoQuery.leadCompanyNameLower = { $in: companyKeys };
+
+    const rows = await Lead.aggregate([
+      { $match: mongoQuery },
+      { $sort: { leadCompanyNameLower: 1, sheetOrder: 1, createdAt: 1, _id: 1 } },
+      { $group: { _id: '$leadCompanyName', contacts: { $push: '$$ROOT' } } },
+      { $project: { contacts: { $slice: ['$contacts', contactPageSize] } } },
+    ]);
+
+    for (const row of rows) {
+      if (!row?._id) continue;
+      contactsByCompany[row._id] = (row.contacts || []).map(normalizeLeadForResponse);
+    }
+
+    return contactsByCompany;
   });
 
   return value;
@@ -358,6 +365,7 @@ router.get('/employee/companies', async (req, res) => {
           query: req.query,
           companyNames: payload.names,
           cacheKey: buildEmployeeCompanyContactsKey(companyCode, phone, {
+            version: 2,
             query: req.query,
             companyNames: payload.names,
             contactPageSize: parseContactPageSize(req.query.contactPageSize),
