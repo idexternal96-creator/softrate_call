@@ -165,14 +165,24 @@ function buildLeadSearchQuery({ companyCode, phone, query = {} }) {
     };
   }
 
-  mongoQuery.$text = { $search: search };
-  projection = { score: { $meta: 'textScore' } };
-  sort = { score: { $meta: 'textScore' }, ...sort };
+  const containsRegex = new RegExp(escapeRegex(normalizedSearch));
+  const rawContainsRegex = new RegExp(escapeRegex(search), 'i');
+  mongoQuery.$or = [
+    { leadCompanyNameLower: containsRegex },
+    { leadCompanyName: rawContainsRegex },
+    { contactNameLower: containsRegex },
+    { contactName: rawContainsRegex },
+    { directorEmailLower: containsRegex },
+    { directorEmailAddress: rawContainsRegex },
+    { setLabelLower: containsRegex },
+    { setLabel: rawContainsRegex },
+    { status: rawContainsRegex },
+  ];
 
   return {
     mongoQuery,
     projection,
-    searchStrategy: 'text',
+    searchStrategy: 'contains',
     sort,
   };
 }
