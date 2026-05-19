@@ -1,21 +1,19 @@
 {
-  "name": "sales-backend",
+  "name": "sales-backend-wrapper",
   "version": "1.0.0",
-  "main": "server.js",
+  "private": true,
+  "description": "Compatibility wrapper for deployments that point at softrate_call/sales-backend.",
+  "main": "../server.js",
   "engines": {
     "node": ">=20 <23",
     "npm": ">=10"
   },
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js",
-    "indexes:lead": "node scripts/ensureLeadIndexes.js",
-    "test": "node --test"
+    "start": "cd .. && NODE_PATH=sales-backend/node_modules node server.js",
+    "dev": "cd .. && NODE_PATH=sales-backend/node_modules nodemon server.js",
+    "indexes:lead": "cd .. && NODE_PATH=sales-backend/node_modules node scripts/ensureLeadIndexes.js",
+    "test": "cd .. && NODE_PATH=sales-backend/node_modules node --test"
   },
-  "author": "",
-  "license": "ISC",
-  "keywords": [],
-  "description": "",
   "dependencies": {
     "@langchain/core": "^1.0.6",
     "@langchain/openai": "^1.0.6",

@@ -20,6 +20,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(`❌ Lead index ensure failed: ${err.message}`);
+  console.error(`Lead index ensure failed: ${err.message}`);
   process.exit(1);
 });
