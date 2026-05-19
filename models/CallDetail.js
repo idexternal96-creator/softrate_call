@@ -12,6 +12,7 @@ const callDetailSchema = new mongoose.Schema({
 });
 
 callDetailSchema.index({ companyCode: 1, phone: 1, date: 1 });
+callDetailSchema.index({ companyCode: 1, phone: 1, date: 1, timestamp: -1 });
 callDetailSchema.index({ companyCode: 1, phone: 1, timestamp: -1 });
 callDetailSchema.index({ companyCode: 1, date: 1, callType: 1 });
 callDetailSchema.index({ companyCode: 1, date: 1, phone: 1, callType: 1 });

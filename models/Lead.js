@@ -50,7 +50,13 @@ leadSchema.index({ companyCode: 1, isArchived: 1, setLabelLower: 1, status: 1, s
 leadSchema.index({ companyCode: 1, assignedEmployeePhone: 1, contactNumberNormalized: 1 });
 leadSchema.index({ companyCode: 1, contactNumberNormalized: 1 });
 leadSchema.index({ companyCode: 1, assignedEmployeePhone: 1, leadCompanyNameLower: 1 });
+leadSchema.index({ companyCode: 1, assignedEmployeePhone: 1, isArchived: 1, leadCompanyNameLower: 1, sheetOrder: 1, _id: 1 });
 leadSchema.index({ companyCode: 1, leadCompanyNameLower: 1 });
+leadSchema.index({ companyCode: 1, assignedEmployeePhone: 1, isArchived: 1, isFavourite: 1, status: 1, sheetOrder: 1, _id: 1 });
+leadSchema.index({ companyCode: 1, assignedEmployeePhone: 1, isArchived: 1, updatedAt: -1, status: 1, _id: 1 });
+leadSchema.index({ companyCode: 1, assignedEmployeePhone: 1, contactNameLower: 1, sheetOrder: 1, _id: 1 });
+leadSchema.index({ companyCode: 1, assignedEmployeePhone: 1, directorEmailLower: 1, sheetOrder: 1, _id: 1 });
+leadSchema.index({ companyCode: 1, assignedEmployeePhone: 1, status: 1, sheetOrder: 1, _id: 1 });
 leadSchema.index({
   leadCompanyName: 'text',
   contactName: 'text',

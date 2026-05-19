@@ -10,6 +10,7 @@ const {
   buildCalllogCacheKey,
   invalidateCalllogCaches,
 } = require('../../../services/calllogCache');
+const { buildPageResponse, parsePageQuery } = require('../../common/pagination/pagination');
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -378,13 +379,48 @@ router.get('/details', async (req, res) => {
     const { companyCode, phone } = req.query;
     if (!companyCode || !phone) return res.status(400).json({ success: false, message: 'companyCode and phone required' });
     const [from, to] = resolveRange(req.query);
+    const pagination = parsePageQuery(req.query);
     const cacheKey = buildCalllogCacheKey(`calllog:details:${companyCode}:${phone}`, { ...req.query, from, to });
     const { value } = await getOrSet(cacheKey, CALLLOG_CACHE_TTLS.details, async () => {
-      const calls = await CallDetail.find({
+      const query = {
         companyCode, phone, date: { $gte: from, $lte: to },
-      }).sort({ timestamp: -1 }).lean();
+      };
+      const search = String(req.query.search || '').trim();
+      if (search) {
+        const pattern = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        query.$or = [
+          { name: pattern },
+          { number: pattern },
+          { callType: pattern },
+        ];
+      }
 
-      return { success: true, calls };
+      if (!pagination.isPaginated) {
+        const calls = await CallDetail.find(query).sort({ timestamp: -1 }).lean();
+        return { success: true, calls, items: calls };
+      }
+
+      const [total, calls] = await Promise.all([
+        CallDetail.countDocuments(query),
+        CallDetail.find(query)
+          .sort({ timestamp: -1 })
+          .skip(pagination.skip)
+          .limit(pagination.pageSize)
+          .lean(),
+      ]);
+
+      const page = buildPageResponse({
+        items: calls,
+        total,
+        page: pagination.page,
+        pageSize: pagination.pageSize,
+      });
+
+      return {
+        success: true,
+        calls: page.items,
+        ...page,
+      };
     });
 
     return res.status(200).json(value);
