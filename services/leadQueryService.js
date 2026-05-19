@@ -222,26 +222,11 @@ async function getLeadSets({ companyCode, phone, query = {} }) {
 async function getLeadCompanies({ companyCode, phone, query = {} }) {
   const { mongoQuery } = buildLeadSearchQuery({ companyCode, phone, query });
   const pagination = parsePagination(query);
-  const normalizedSearch = normalizeText(query.search);
   const pipeline = [
     { $match: mongoQuery },
     { $match: { leadCompanyNameLower: { $ne: '' } } },
-    { $group: { _id: '$leadCompanyName', count: { $sum: 1 }, companyLower: { $first: '$leadCompanyNameLower' } } },
-    ...(normalizedSearch ? [{
-      $addFields: {
-        searchRank: {
-          $switch: {
-            branches: [
-              { case: { $eq: ['$companyLower', normalizedSearch] }, then: 0 },
-              { case: { $regexMatch: { input: '$companyLower', regex: new RegExp(`^${escapeRegex(normalizedSearch)}`) } }, then: 1 },
-              { case: { $regexMatch: { input: '$companyLower', regex: new RegExp(escapeRegex(normalizedSearch)) } }, then: 2 },
-            ],
-            default: 3,
-          },
-        },
-      },
-    }] : []),
-    { $sort: normalizedSearch ? { searchRank: 1, count: -1, _id: 1 } : { count: -1, _id: 1 } },
+    { $group: { _id: '$leadCompanyName', count: { $sum: 1 } } },
+    { $sort: { count: -1, _id: 1 } },
   ];
 
   const [totalRows, rows] = await Promise.all([
