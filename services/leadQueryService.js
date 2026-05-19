@@ -119,34 +119,6 @@ function buildLeadSearchQuery({ companyCode, phone, query = {} }) {
     };
   }
 
-  if (searchMode === 'quick' && normalizedSearch) {
-    const prefixRegex = new RegExp(`^${escapeRegex(normalizedSearch)}`);
-    const rawPrefixRegex = new RegExp(`^${escapeRegex(search)}`, 'i');
-    const quickClauses = [
-      { leadCompanyNameLower: prefixRegex },
-      { leadCompanyName: rawPrefixRegex },
-      { contactNameLower: prefixRegex },
-      { contactName: rawPrefixRegex },
-      { directorEmailLower: prefixRegex },
-      { directorEmailAddress: rawPrefixRegex },
-      { setLabelLower: prefixRegex },
-      { setLabel: rawPrefixRegex },
-      { status: new RegExp(`^${escapeRegex(search)}$`, 'i') },
-    ];
-
-    if (normalizedPhone.length >= 3) {
-      quickClauses.unshift({ contactNumberNormalized: new RegExp(`^${escapeRegex(normalizedPhone)}`) });
-    }
-
-    mongoQuery.$or = quickClauses;
-    return {
-      mongoQuery,
-      projection,
-      searchStrategy: 'quick_prefix',
-      sort,
-    };
-  }
-
   if (normalizedSearch.length < 3) {
     const prefixRegex = new RegExp(`^${escapeRegex(normalizedSearch)}`);
     const rawPrefixRegex = new RegExp(`^${escapeRegex(search)}`, 'i');

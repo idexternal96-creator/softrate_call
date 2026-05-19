@@ -47,19 +47,6 @@ test('buildLeadSearchQuery uses prefix search for short text', () => {
   assert.equal(result.mongoQuery.$or.length > 0, true);
 });
 
-test('buildLeadSearchQuery uses indexed quick prefix search when requested', () => {
-  const result = buildLeadSearchQuery({
-    companyCode: 'DV01',
-    phone: '9999999999',
-    query: { search: 'Kshoma Green', searchMode: 'quick' },
-  });
-
-  assert.equal(result.searchStrategy, 'quick_prefix');
-  assert.ok(Array.isArray(result.mongoQuery.$or));
-  assert.deepEqual(result.sort, { sheetOrder: 1, createdAt: 1, _id: 1 });
-  assert.equal(result.mongoQuery.$or.some((clause) => !!clause.leadCompanyNameLower), true);
-});
-
 test('buildLeadSearchQuery uses text search for longer text queries', () => {
   const result = buildLeadSearchQuery({
     companyCode: 'DV01',
