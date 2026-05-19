@@ -119,6 +119,29 @@ function buildLeadSearchQuery({ companyCode, phone, query = {} }) {
     };
   }
 
+  if (searchMode === 'quick' && normalizedSearch) {
+    const prefixRegex = new RegExp(`^${escapeRegex(normalizedSearch)}`);
+    const quickClauses = [
+      { leadCompanyNameLower: prefixRegex },
+      { contactNameLower: prefixRegex },
+      { directorEmailLower: prefixRegex },
+      { setLabelLower: prefixRegex },
+      { status: search },
+    ];
+
+    if (normalizedPhone.length >= 3) {
+      quickClauses.unshift({ contactNumberNormalized: new RegExp(`^${escapeRegex(normalizedPhone)}`) });
+    }
+
+    mongoQuery.$or = quickClauses;
+    return {
+      mongoQuery,
+      projection,
+      searchStrategy: 'quick_prefix',
+      sort,
+    };
+  }
+
   if (normalizedSearch.length < 3) {
     const prefixRegex = new RegExp(`^${escapeRegex(normalizedSearch)}`);
     const rawPrefixRegex = new RegExp(`^${escapeRegex(search)}`, 'i');
@@ -142,24 +165,14 @@ function buildLeadSearchQuery({ companyCode, phone, query = {} }) {
     };
   }
 
-  const containsRegex = new RegExp(escapeRegex(normalizedSearch));
-  const rawContainsRegex = new RegExp(escapeRegex(search), 'i');
-  mongoQuery.$or = [
-    { leadCompanyNameLower: containsRegex },
-    { leadCompanyName: rawContainsRegex },
-    { contactNameLower: containsRegex },
-    { contactName: rawContainsRegex },
-    { directorEmailLower: containsRegex },
-    { directorEmailAddress: rawContainsRegex },
-    { setLabelLower: containsRegex },
-    { setLabel: rawContainsRegex },
-    { status: rawContainsRegex },
-  ];
+  mongoQuery.$text = { $search: search };
+  projection = { score: { $meta: 'textScore' } };
+  sort = { score: { $meta: 'textScore' }, ...sort };
 
   return {
     mongoQuery,
     projection,
-    searchStrategy: 'contains',
+    searchStrategy: 'text',
     sort,
   };
 }
