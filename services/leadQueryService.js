@@ -121,12 +121,17 @@ function buildLeadSearchQuery({ companyCode, phone, query = {} }) {
 
   if (searchMode === 'quick' && normalizedSearch) {
     const prefixRegex = new RegExp(`^${escapeRegex(normalizedSearch)}`);
+    const rawPrefixRegex = new RegExp(`^${escapeRegex(search)}`, 'i');
     const quickClauses = [
       { leadCompanyNameLower: prefixRegex },
+      { leadCompanyName: rawPrefixRegex },
       { contactNameLower: prefixRegex },
+      { contactName: rawPrefixRegex },
       { directorEmailLower: prefixRegex },
+      { directorEmailAddress: rawPrefixRegex },
       { setLabelLower: prefixRegex },
-      { status: search },
+      { setLabel: rawPrefixRegex },
+      { status: new RegExp(`^${escapeRegex(search)}$`, 'i') },
     ];
 
     if (normalizedPhone.length >= 3) {

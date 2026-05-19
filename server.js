@@ -4,11 +4,6 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const { getAiConfigStatus } = require('./services/ai/modelFactory');
 const { runLeadBackfill } = require('./services/leadBackfillService');
-const {
-  ensureLeadIndexes,
-  parseBooleanEnv,
-  shouldEnsureLeadIndexes,
-} = require('./services/leadIndexService');
 
 const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET'];
 const missingEnvVars = requiredEnvVars.filter((key) => !process.env[key] || !process.env[key].trim());
@@ -31,21 +26,11 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static('public'));
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/softrate_record';
-const mongooseAutoIndex = parseBooleanEnv(
-  process.env.MONGOOSE_AUTO_INDEX,
-  process.env.NODE_ENV !== 'production',
-);
-
-mongoose.set('autoIndex', mongooseAutoIndex);
 
 mongoose
   .connect(MONGO_URI)
-  .then(async () => {
+  .then(() => {
     console.log('✅ MongoDB connected successfully');
-    console.log(`ℹ️ Mongoose autoIndex is ${mongooseAutoIndex ? 'enabled' : 'disabled'}`);
-    if (shouldEnsureLeadIndexes()) {
-      await ensureLeadIndexes();
-    }
     runLeadBackfill().catch((err) => {
       console.error('❌ Lead backfill failed:', err.message);
     });
