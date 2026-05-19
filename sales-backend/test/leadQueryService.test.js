@@ -58,6 +58,10 @@ test('buildLeadSearchQuery uses indexed quick prefix search when requested', () 
   assert.ok(Array.isArray(result.mongoQuery.$or));
   assert.deepEqual(result.sort, { sheetOrder: 1, createdAt: 1, _id: 1 });
   assert.equal(result.mongoQuery.$or.some((clause) => !!clause.leadCompanyNameLower), true);
+  assert.equal(result.mongoQuery.$or.some((clause) => !!clause.leadCompanyName), false);
+  assert.equal(result.mongoQuery.$or.some((clause) => !!clause.contactName), false);
+  assert.equal(result.mongoQuery.$or.some((clause) => !!clause.setLabel), false);
+  assert.equal(result.mongoQuery.$or.some((clause) => clause.status === 'Kshoma Green'), true);
 });
 
 test('buildLeadSearchQuery uses text search for longer text queries', () => {
