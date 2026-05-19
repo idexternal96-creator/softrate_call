@@ -38,7 +38,6 @@ const quotationSchema = new mongoose.Schema({
     phone: { type: String, default: '' },
     email: { type: String, default: '' },
     website: { type: String, default: '' },
-    gstNumber: { type: String, default: '' },
     footer: { type: String, default: '' },
   },
 }, { timestamps: true });

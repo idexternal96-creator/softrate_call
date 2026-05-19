@@ -139,7 +139,6 @@ router.post('/', async (req, res) => {
         phone: user.contactDetails?.phone || '',
         email: user.contactDetails?.email || '',
         website: user.contactDetails?.website || '',
-        gstNumber: user.gstNumber || '',
         footer: user.invoiceFooter || '',
       },
     });
