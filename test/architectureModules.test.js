@@ -51,6 +51,17 @@ test('lead dto trims route boundary inputs', () => {
   });
 });
 
+test('lead dto preserves quick search mode for employee global search', () => {
+  const result = toLeadListQueryDto({
+    companyCode: 'STP',
+    phone: '999',
+    search: 'Acme',
+    searchMode: 'quick',
+  });
+
+  assert.equal(result.searchMode, 'quick');
+});
+
 test('lead mapper normalizes newline remarks', () => {
   assert.deepEqual(normalizeRemarks(' first\n\nsecond '), ['first', 'second']);
 

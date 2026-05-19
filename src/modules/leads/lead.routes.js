@@ -8,6 +8,7 @@ const {
   buildAdminCompanyKey,
   buildAdminLeadListKey,
   buildAdminSetKey,
+  buildEmployeeCompanyContactsKey,
   buildEmployeeCompanyKey,
   buildEmployeeLeadListKey,
   buildEmployeeSetKey,
@@ -32,6 +33,8 @@ const { getAiBriefForLead } = require('../../../services/ai/researchWorkflow');
 const { getAiSuggestionForLead } = require('../../../services/ai/suggestionWorkflow');
 
 const router = express.Router();
+const DEFAULT_COMPANY_CONTACT_PAGE_SIZE = 20;
+const MAX_COMPANY_CONTACT_PAGE_SIZE = 200;
 
 function normalizeLeadForResponse(lead) {
   if (!lead) return lead;
@@ -394,7 +397,7 @@ router.get('/employee/companies', async (req, res) => {
       success: true,
       companies: payload.companies,
       names: payload.names,
-      contactsByCompany: payload.contactsByCompany || {},
+      contactsByCompany,
       page: payload.page,
       pageSize: payload.pageSize,
       total: payload.total,
