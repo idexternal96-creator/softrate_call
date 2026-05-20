@@ -31,6 +31,7 @@ test('lead dto trims route boundary inputs', () => {
   const result = toLeadListQueryDto({
     companyCode: ' STP ',
     phone: ' 999 ',
+    division: ' MSME ',
     search: ' Acme ',
     searchMode: 'phone',
   });
@@ -39,6 +40,7 @@ test('lead dto trims route boundary inputs', () => {
     companyCode: 'STP',
     phone: '999',
     setLabel: undefined,
+    division: 'MSME',
     search: 'Acme',
     searchMode: 'phone',
     status: undefined,

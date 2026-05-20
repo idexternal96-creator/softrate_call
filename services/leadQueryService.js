@@ -51,6 +51,11 @@ function buildBaseLeadQuery({ companyCode, phone, query = {} }) {
     });
   }
 
+  const division = String(query.division ?? query.mainDivisionDescription ?? '').trim();
+  if (division) {
+    mongoQuery.mainDivisionDescription = new RegExp(`^${escapeRegex(division)}$`, 'i');
+  }
+
   const statuses = String(query.statuses ?? '')
     .split(',')
     .map((status) => status.trim())
@@ -189,6 +194,21 @@ function buildLeadSort(sortKey) {
   return sortMap[sortKey] || sortMap.sheetOrder_asc;
 }
 
+async function getLeadDivisions({ companyCode, phone, query = {} }) {
+  const mongoQuery = buildBaseLeadQuery({ companyCode, phone, query });
+  const rows = await Lead.aggregate([
+    { $match: mongoQuery },
+    { $match: { mainDivisionDescription: { $nin: ['', null] } } },
+    { $group: { _id: '$mainDivisionDescription', count: { $sum: 1 } } },
+    { $sort: { _id: 1 } },
+  ]);
+
+  return {
+    divisions: rows.map((row) => row._id).filter(Boolean),
+    items: rows.map((row) => ({ label: row._id, count: row.count })),
+  };
+}
+
 async function getLeadSets({ companyCode, phone, query = {} }) {
   const mongoQuery = buildBaseLeadQuery({ companyCode, phone, query });
   const rows = await Lead.aggregate([
@@ -269,6 +289,7 @@ module.exports = {
   MAX_PAGE_SIZE,
   buildLeadSearchQuery,
   buildLeadSort,
+  getLeadDivisions,
   getLeadCompanies,
   getLeadSets,
   isPaginatedRequest,

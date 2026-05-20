@@ -24,6 +24,7 @@ const {
 const { canUseQueue, queueLeadImportJob } = require('../../../services/leadImportQueue');
 const {
   buildLeadSearchQuery,
+  getLeadDivisions,
   getLeadCompanies,
   getLeadSets,
   parsePagination,
@@ -364,6 +365,23 @@ router.get('/employee/sets', async (req, res) => {
   } catch (err) {
     console.error('[get employee sets]', err);
     return res.status(500).json({ success: false, message: 'Server error fetching sets.' });
+  }
+});
+
+// GET — fetch only distinct lead segregation values for an employee
+router.get('/employee/divisions', async (req, res) => {
+  try {
+    const { companyCode, phone } = req.query;
+    if (!companyCode || !phone) {
+      return res.status(400).json({ success: false, message: 'companyCode and phone are required.' });
+    }
+
+    const payload = await getLeadDivisions({ companyCode, phone, query: {} });
+
+    return res.status(200).json({ success: true, divisions: payload.divisions, items: payload.items });
+  } catch (err) {
+    console.error('[get employee divisions]', err);
+    return res.status(500).json({ success: false, message: 'Server error fetching lead segregations.' });
   }
 });
 

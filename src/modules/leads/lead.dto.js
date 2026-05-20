@@ -3,6 +3,7 @@ function toLeadListQueryDto(query = {}) {
     companyCode: String(query.companyCode || '').trim(),
     phone: query.phone ? String(query.phone).trim() : undefined,
     setLabel: query.setLabel ? String(query.setLabel).trim() : undefined,
+    division: query.division ? String(query.division).trim() : undefined,
     search: query.search ? String(query.search).trim() : undefined,
     searchMode: ['phone', 'text', 'quick'].includes(query.searchMode) ? query.searchMode : 'text',
     status: query.status ? String(query.status).trim() : undefined,
