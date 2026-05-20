@@ -110,13 +110,6 @@ function shouldIncludeCompanyContacts(query) {
   return query.includeContacts === true || String(query.includeContacts ?? '').trim().toLowerCase() === 'true';
 }
 
-function shouldIncludeLeadFacets(query, pagination) {
-  const requested = String(query.includeFacets ?? '').trim().toLowerCase();
-  if (requested === 'false') return false;
-  if (requested === 'true') return true;
-  return !pagination.isPaginated || pagination.page === 1;
-}
-
 async function getCachedEmployeeCompanyContacts({ companyCode, phone, query, companyNames, cacheKey }) {
   const contactPageSize = parseContactPageSize(query.contactPageSize);
   const contactQuery = { ...query };
@@ -164,7 +157,7 @@ async function getCachedEmployeeCompanyContacts({ companyCode, phone, query, com
 async function fetchLeadList({ companyCode, phone, scope, reqQuery }) {
   const pagination = parsePagination(reqQuery);
   const searchContext = buildLeadSearchQuery({ companyCode, phone, query: reqQuery });
-  const shouldIncludeFacets = shouldIncludeLeadFacets(reqQuery, pagination);
+  const shouldIncludeFacets = !pagination.isPaginated || pagination.page === 1 || reqQuery.includeFacets === 'true';
   const cacheParams = {
     query: reqQuery,
     page: pagination.page,
@@ -211,8 +204,6 @@ async function fetchLeadList({ companyCode, phone, scope, reqQuery }) {
     delete facetQuery.paginated;
     delete facetQuery.sort;
     delete facetQuery.includeFacets;
-    delete facetQuery.includeContacts;
-    delete facetQuery.contactPageSize;
 
     [setPayload, companyPayload] = await Promise.all([
       scope === 'employee'
@@ -383,16 +374,11 @@ router.get('/employee/companies', async (req, res) => {
       return res.status(400).json({ success: false, message: 'companyCode and phone are required.' });
     }
 
-    const companyCacheQuery = { ...req.query };
-    delete companyCacheQuery.includeFacets;
-    delete companyCacheQuery.includeContacts;
-    delete companyCacheQuery.contactPageSize;
-
     const payload = await getCachedLeadCompanies({
       companyCode,
       phone,
       query: req.query,
-      cacheKey: buildEmployeeCompanyKey(companyCode, phone, companyCacheQuery),
+      cacheKey: buildEmployeeCompanyKey(companyCode, phone, req.query),
     });
 
     const contactsByCompany = shouldIncludeCompanyContacts(req.query)
@@ -402,7 +388,7 @@ router.get('/employee/companies', async (req, res) => {
           query: req.query,
           companyNames: payload.names,
           cacheKey: buildEmployeeCompanyContactsKey(companyCode, phone, {
-            query: companyCacheQuery,
+            query: req.query,
             companyNames: payload.names,
             contactPageSize: parseContactPageSize(req.query.contactPageSize),
           }),
