@@ -20,6 +20,16 @@ const crmAmcSchema = new mongoose.Schema(
     outstandingAmount: { type: Number, default: 0 },
     owner: { type: String, trim: true, default: '' },
     notes: { type: String, trim: true, default: '' },
+    source: { type: String, enum: ['manual', 'hostinger'], default: 'manual' },
+    mappedAt: { type: Date },
+    mappedBy: { type: String, trim: true, default: '' },
+    lastImportedAt: { type: Date },
+    lastPaidAt: { type: Date },
+    lastPaidRenewalDate: { type: Date },
+    blocked: { type: Boolean, default: false },
+    blockedAt: { type: Date },
+    blockedBy: { type: String, trim: true, default: '' },
+    blockReason: { type: String, trim: true, default: '' },
   },
   { timestamps: true }
 );
