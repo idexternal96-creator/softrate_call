@@ -210,8 +210,14 @@ async function getLeadCompanies({ companyCode, phone, query = {} }) {
   const pipeline = [
     { $match: mongoQuery },
     { $match: { leadCompanyNameLower: { $ne: '' } } },
-    { $group: { _id: '$leadCompanyName', count: { $sum: 1 } } },
-    { $sort: { count: -1, _id: 1 } },
+    {
+      $group: {
+        _id: '$leadCompanyName',
+        count: { $sum: 1 },
+        minSheetOrder: { $min: '$sheetOrder' },
+      },
+    },
+    { $sort: { minSheetOrder: 1, _id: 1 } },
   ];
 
   const [totalRows, rows] = await Promise.all([
