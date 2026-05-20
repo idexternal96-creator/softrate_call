@@ -261,14 +261,24 @@ router.get('/', async (req, res) => {
       return res.status(200).json({ success: true, bookmarks, items: bookmarks });
     }
 
-    const [total, bookmarks] = await Promise.all([
-      Bookmark.countDocuments(query),
-      Bookmark.find(query)
-        .sort({ createdAt: -1 })
-        .skip(pagination.skip)
-        .limit(pagination.pageSize)
-        .lean(),
+    const sort = query.reminderDate
+      ? { reminderDate: 1, createdAt: -1 }
+      : { createdAt: -1 };
+    const [result] = await Bookmark.aggregate([
+      { $match: query },
+      { $sort: sort },
+      {
+        $facet: {
+          items: [
+            { $skip: pagination.skip },
+            { $limit: pagination.pageSize },
+          ],
+          total: [{ $count: 'count' }],
+        },
+      },
     ]);
+    const bookmarks = result?.items || [];
+    const total = result?.total?.[0]?.count || 0;
 
     const page = buildPageResponse({
       items: bookmarks,

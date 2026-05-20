@@ -220,15 +220,20 @@ async function getLeadCompanies({ companyCode, phone, query = {} }) {
     { $sort: { minSheetOrder: 1, _id: 1 } },
   ];
 
-  const [totalRows, rows] = await Promise.all([
-    Lead.aggregate([...pipeline, { $count: 'total' }]),
-    Lead.aggregate([
-      ...pipeline,
-      ...(pagination.isPaginated ? [{ $skip: pagination.skip }, { $limit: pagination.pageSize }] : []),
-    ]),
+  const [result] = await Lead.aggregate([
+    ...pipeline,
+    {
+      $facet: {
+        rows: pagination.isPaginated
+          ? [{ $skip: pagination.skip }, { $limit: pagination.pageSize }]
+          : [],
+        total: [{ $count: 'count' }],
+      },
+    },
   ]);
 
-  const total = totalRows[0]?.total || rows.length;
+  const rows = result?.rows || [];
+  const total = result?.total?.[0]?.count || rows.length;
   const companies = rows.map((row) => ({ name: row._id, count: row.count }));
   const names = rows.map((row) => row._id).filter(Boolean);
   let contactsByCompany = {};
