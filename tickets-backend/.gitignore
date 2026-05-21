@@ -1,0 +1,3 @@
+uploads/tickets/*
+!uploads/tickets/.gitkeep
+node_modules/

@@ -2,6 +2,7 @@ const Lead = require('../models/Lead');
 const User = require('../models/User');
 const CrmContract = require('../models/CrmContract');
 const CrmAmc = require('../models/CrmAmc');
+const { lifecycleStatusFor } = require('./amcService');
 
 function escapeRegex(value) {
   return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -53,16 +54,7 @@ function contractStatusFor(contracts, type, clientName) {
 
 function amcStatusFor(amcRecords, clientName) {
   const record = amcRecords.find((item) => item.clientCompanyName.toLowerCase() === clientName.toLowerCase());
-  if (!record) return 'Not Configured';
-  if (record.status && record.status !== 'Not Configured') return record.status;
-  if (!record.renewalDate) return 'Not Configured';
-
-  const renewal = new Date(record.renewalDate);
-  const now = new Date();
-  const diffDays = Math.ceil((renewal.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-  if (diffDays < 0) return 'Overdue';
-  if (diffDays <= 30) return 'Due Soon';
-  return 'Active';
+  return lifecycleStatusFor(record);
 }
 
 async function getConvertedClients({ companyCode = '', search = '' } = {}) {
