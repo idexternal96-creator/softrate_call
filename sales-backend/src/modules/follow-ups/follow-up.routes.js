@@ -62,6 +62,46 @@ function buildEmployeeBookmarkQuery(reqQuery) {
   return query;
 }
 
+function groupBookmarksByCompany(bookmarks) {
+  const counts = new Map();
+  bookmarks.forEach((bookmark) => {
+    const company = bookmark.companyName || 'Unnamed Company';
+    counts.set(company, (counts.get(company) || 0) + 1);
+  });
+
+  return Array.from(counts.entries())
+    .map(([company, count]) => ({ company, name: company, count }))
+    .sort((a, b) => a.company.localeCompare(b.company));
+}
+
+function buildAdminBookmarkQuery(reqQuery) {
+  const query = {
+    companyCode: String(reqQuery.companyCode || '').trim(),
+  };
+
+  const search = String(reqQuery.search || '').trim();
+  if (search) {
+    const pattern = new RegExp(escapeRegex(search), 'i');
+    query.$or = [
+      { contactName: pattern },
+      { contactNumber: pattern },
+      { companyName: pattern },
+      { description: pattern },
+      { remarks: pattern },
+    ];
+  }
+
+  if (reqQuery.filter === 'today') {
+    applyReminderDateRange(query, new Date().toISOString().slice(0, 10));
+  } else if (reqQuery.reminderDate) {
+    applyReminderDateRange(query, reqQuery.reminderDate);
+  } else if (reqQuery.dateFrom || reqQuery.dateTo) {
+    applyReminderDateRange(query, reqQuery.dateFrom || reqQuery.dateTo, reqQuery.dateTo || reqQuery.dateFrom);
+  }
+
+  return query;
+}
+
 // POST — create or update a bookmark (Follow-up)
 router.post('/', async (req, res) => {
   try {
@@ -153,29 +193,12 @@ router.post('/', async (req, res) => {
 // GET — fetch all bookmarks for a company (Admin view)
 router.get('/admin', async (req, res) => {
   try {
-    const { companyCode, paginated, search, filter, reminderDate } = req.query;
+    const { companyCode, paginated } = req.query;
     if (!companyCode) {
       return res.status(400).json({ success: false, message: 'companyCode is required.' });
     }
 
-    const query = { companyCode };
-    if (filter === 'today') {
-      const today = new Date().toISOString().slice(0, 10);
-      query.reminderDate = { $regex: `^${today}` };
-    }
-    if (reminderDate) {
-      query.reminderDate = { $regex: `^${String(reminderDate).slice(0, 10)}` };
-    }
-    if (search) {
-      const pattern = new RegExp(String(search).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      query.$or = [
-        { contactName: pattern },
-        { contactNumber: pattern },
-        { companyName: pattern },
-        { description: pattern },
-        { remarks: pattern },
-      ];
-    }
+    const query = buildAdminBookmarkQuery(req.query);
 
     if (paginated === 'true' || paginated === true) {
       const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
@@ -236,8 +259,19 @@ router.get('/admin', async (req, res) => {
       });
     }
 
-    const bookmarks = await Bookmark.find(query).sort({ reminderDate: 1 });
-    return res.status(200).json({ success: true, bookmarks });
+    const bookmarks = await Bookmark.find(query).sort({ reminderDate: 1, createdAt: -1 }).lean();
+    const companies = groupBookmarksByCompany(bookmarks);
+
+    return res.status(200).json({
+      success: true,
+      bookmarks,
+      companies,
+      page: 1,
+      pageSize: companies.length,
+      total: companies.length,
+      totalBookmarks: bookmarks.length,
+      hasMore: false,
+    });
   } catch (err) {
     console.error('[get admin bookmarks]', err);
     return res.status(500).json({ success: false, message: 'Server error fetching company bookmarks.' });

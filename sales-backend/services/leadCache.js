@@ -3,7 +3,7 @@ const { hashObject, invalidatePrefix } = require('./cacheService');
 const LEAD_CACHE_TTLS = {
   list: 45,
   facets: 120,
-  companyContacts: 120,
+  companyContacts: 86400,
 };
 const LEAD_CACHE_NAMESPACE = 'lead:v2';
 
@@ -59,6 +59,7 @@ async function invalidateLeadCaches({ companyCode, phone }) {
       `lead:list:employee:${companyCode}:${phone}:`,
       `lead:sets:employee:${companyCode}:${phone}:`,
       `lead:companies:employee:${companyCode}:${phone}:`,
+      `lead:company-contacts:employee:${companyCode}:${phone}:`,
       `lead:status-counts:employee:${companyCode}:${phone}:`,
     );
   } else {
@@ -71,6 +72,7 @@ async function invalidateLeadCaches({ companyCode, phone }) {
       `lead:list:employee:${companyCode}:`,
       `lead:sets:employee:${companyCode}:`,
       `lead:companies:employee:${companyCode}:`,
+      `lead:company-contacts:employee:${companyCode}:`,
       `lead:status-counts:employee:${companyCode}:`,
     );
   }

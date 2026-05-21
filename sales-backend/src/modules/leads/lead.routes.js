@@ -34,7 +34,7 @@ const { getAiBriefForLead } = require('../../../services/ai/researchWorkflow');
 const { getAiSuggestionForLead } = require('../../../services/ai/suggestionWorkflow');
 
 const router = express.Router();
-const DEFAULT_COMPANY_CONTACT_PAGE_SIZE = 20;
+const DEFAULT_COMPANY_CONTACT_PAGE_SIZE = 40;
 const MAX_COMPANY_CONTACT_PAGE_SIZE = 200;
 
 function normalizeLeadForResponse(lead) {
@@ -406,6 +406,7 @@ router.get('/employee/companies', async (req, res) => {
           query: req.query,
           companyNames: payload.names,
           cacheKey: buildEmployeeCompanyContactsKey(companyCode, phone, {
+            version: 2,
             query: req.query,
             companyNames: payload.names,
             contactPageSize: parseContactPageSize(req.query.contactPageSize),
