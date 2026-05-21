@@ -57,6 +57,15 @@ function dateRangeFromQuery(query = {}) {
   };
 }
 
+function currentFinancialYearRange(now = new Date()) {
+  const date = parseDate(now) || new Date();
+  const startYear = date.getMonth() >= 3 ? date.getFullYear() : date.getFullYear() - 1;
+  return {
+    from: new Date(startYear, 3, 1, 0, 0, 0, 0),
+    to: new Date(startYear + 1, 2, 31, 23, 59, 59, 999),
+  };
+}
+
 function withinRange(value, range = {}) {
   const date = parseDate(value);
   if (!date) return false;
@@ -185,6 +194,7 @@ function serializeAmc(amc) {
     daysUntilRenewal,
     outstandingAmount: outstanding,
     paidAt: amc.lastPaidAt || null,
+    lastPaidRenewalDate: amc.lastPaidRenewalDate || null,
     notes: amc.notes || '',
   };
 }
@@ -546,11 +556,19 @@ async function getIncomeStreams(companyCode, query = {}) {
 async function getReceivables(companyCode, view = 'invoices', query = {}) {
   const data = await getFinanceCollections(companyCode);
   const range = dateRangeFromQuery(query);
-  const invoices = data.invoices.filter((item) => withinRange(item.invoiceDate, range));
-  const payments = [...data.invoices.filter((item) => item.paidAmount > 0), ...data.crmPayments.filter((item) => item.paidAmount > 0)]
+  const hasRequestedRange = !!(range.from || range.to);
+  const amcRange = hasRequestedRange ? range : currentFinancialYearRange();
+  const invoices = data.invoices
+    .filter((item) => item.paymentStatus === 'Paid')
+    .filter((item) => !hasRequestedRange || withinRange(item.invoiceDate || item.paidAt, range))
+    .sort((a, b) => new Date(b.invoiceDate || b.paidAt || 0) - new Date(a.invoiceDate || a.paidAt || 0));
+  const payments = data.invoices.filter((item) => item.paidAmount > 0)
     .filter((item) => withinRange(item.paidAt || item.invoiceDate, range));
   const outstanding = buildOutstanding(data);
-  const amcRenewals = data.amcRecords;
+  const amcRenewals = data.amcRecords
+    .filter((item) => item.paymentStatus === 'Paid')
+    .filter((item) => withinRange(item.paidAt || item.lastPaidRenewalDate || item.renewalDate, amcRange))
+    .sort((a, b) => new Date(b.paidAt || b.renewalDate || 0) - new Date(a.paidAt || a.renewalDate || 0));
   const clientBalance = buildClientBalances(data);
   const views = {
     invoices,
@@ -564,12 +582,19 @@ async function getReceivables(companyCode, view = 'invoices', query = {}) {
     success: true,
     view,
     items: views[view] || invoices,
-    analytics: {
-      totalInvoiced: sum(invoices, (item) => item.totalAmount),
-      totalPaid: sum(payments, (item) => item.paidAmount),
-      outstandingAmount: sum(outstanding, (item) => item.balanceAmount || item.outstandingAmount),
-      amcDue: amcRenewals.filter((item) => item.paymentStatus !== 'Paid').length,
-    },
+    analytics: view === 'amc-renewals'
+      ? {
+          paidAmcCharges: sum(amcRenewals, (item) => item.paidAmount || item.totalAmount),
+          annualFeeValue: sum(amcRenewals, (item) => item.totalAmount || item.annualFee),
+          paidAmcCount: amcRenewals.length,
+          outstandingAmount: sum(amcRenewals, (item) => item.balanceAmount || item.outstandingAmount),
+        }
+      : {
+          totalInvoiced: sum(invoices, (item) => item.totalAmount),
+          totalPaid: sum(invoices, (item) => item.paidAmount),
+          paidInvoiceCount: invoices.length,
+          outstandingAmount: sum(invoices, (item) => item.balanceAmount || item.outstandingAmount),
+        },
   };
 }
 
