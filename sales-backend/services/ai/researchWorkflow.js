@@ -258,8 +258,7 @@ async function getAiBriefForLead(leadId) {
         retryable: true,
         cacheStatus: 'miss',
         researchStatus: 'failed',
-        message: 'AI brief generation failed. Please retry.',
-        error: String(error.message || error),
+        message: 'AI service is temporarily unavailable. Please retry later.',
       },
     };
   }

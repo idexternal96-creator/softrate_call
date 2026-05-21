@@ -289,12 +289,10 @@ async function getAiSuggestionForLead(leadId, input = {}) {
         success: false,
         retryable: error?.status === 404 ? false : true,
         scenario,
-        failureCategory,
         message:
           error?.status === 404
             ? String(error.message || 'Required context was not found.')
-            : 'AI suggestion generation failed. Please retry.',
-        error: String(error?.message || error),
+            : 'AI service is temporarily unavailable. Please retry later.',
       },
     };
   }

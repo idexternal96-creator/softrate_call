@@ -2,7 +2,65 @@ const express = require('express');
 const Bookmark = require('../../../models/Bookmark');
 const eventBus = require('../../../services/eventBus');
 const { logChange } = require('../../../services/historyService');
+const { buildPageResponse, parsePageQuery } = require('../../common/pagination/pagination');
 const router = express.Router();
+
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function dateBoundary(dateValue, endOfDay = false) {
+  const raw = String(dateValue || '').trim();
+  if (!raw) return null;
+  const dateOnly = raw.slice(0, 10);
+  const date = new Date(`${dateOnly}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  if (endOfDay) date.setUTCDate(date.getUTCDate() + 1);
+  return date;
+}
+
+function applyReminderDateRange(query, fromValue, toValue = fromValue) {
+  const from = dateBoundary(fromValue);
+  const to = dateBoundary(toValue, true);
+  if (!from && !to) return;
+  query.reminderDate = {};
+  if (from) query.reminderDate.$gte = from;
+  if (to) query.reminderDate.$lt = to;
+}
+
+function buildEmployeeBookmarkQuery(reqQuery) {
+  const query = {
+    companyCode: String(reqQuery.companyCode || '').trim(),
+    employeePhone: String(reqQuery.phone || reqQuery.employeePhone || '').trim(),
+  };
+
+  const companyName = String(reqQuery.companyName || '').trim();
+  if (companyName) {
+    query.companyName = new RegExp(`^${escapeRegex(companyName)}$`, 'i');
+  }
+
+  const search = String(reqQuery.search || '').trim();
+  if (search) {
+    const pattern = new RegExp(escapeRegex(search), 'i');
+    query.$or = [
+      { contactName: pattern },
+      { contactNumber: pattern },
+      { companyName: pattern },
+      { description: pattern },
+      { remarks: pattern },
+    ];
+  }
+
+  if (reqQuery.filter === 'today') {
+    applyReminderDateRange(query, new Date().toISOString().slice(0, 10));
+  } else if (reqQuery.reminderDate) {
+    applyReminderDateRange(query, reqQuery.reminderDate);
+  } else if (reqQuery.dateFrom || reqQuery.dateTo) {
+    applyReminderDateRange(query, reqQuery.dateFrom || reqQuery.dateTo, reqQuery.dateTo || reqQuery.dateFrom);
+  }
+
+  return query;
+}
 
 // POST — create or update a bookmark (Follow-up)
 router.post('/', async (req, res) => {
@@ -189,12 +247,41 @@ router.get('/admin', async (req, res) => {
 // GET — fetch all bookmarks for an employee
 router.get('/', async (req, res) => {
   try {
-    const { companyCode, phone } = req.query;
+    const { companyCode } = req.query;
+    const phone = req.query.phone || req.query.employeePhone;
     if (!companyCode || !phone) {
       return res.status(400).json({ success: false, message: 'companyCode and phone are required.' });
     }
-    const bookmarks = await Bookmark.find({ companyCode, employeePhone: phone }).sort({ createdAt: -1 });
-    return res.status(200).json({ success: true, bookmarks });
+
+    const query = buildEmployeeBookmarkQuery(req.query);
+    const pagination = parsePageQuery(req.query);
+
+    if (!pagination.isPaginated) {
+      const bookmarks = await Bookmark.find(query).sort({ createdAt: -1 }).lean();
+      return res.status(200).json({ success: true, bookmarks, items: bookmarks });
+    }
+
+    const [total, bookmarks] = await Promise.all([
+      Bookmark.countDocuments(query),
+      Bookmark.find(query)
+        .sort({ createdAt: -1 })
+        .skip(pagination.skip)
+        .limit(pagination.pageSize)
+        .lean(),
+    ]);
+
+    const page = buildPageResponse({
+      items: bookmarks,
+      total,
+      page: pagination.page,
+      pageSize: pagination.pageSize,
+    });
+
+    return res.status(200).json({
+      success: true,
+      bookmarks: page.items,
+      ...page,
+    });
   } catch (err) {
     console.error('[get bookmarks]', err);
     return res.status(500).json({ success: false, message: 'Server error fetching bookmarks.' });

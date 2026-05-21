@@ -31,6 +31,7 @@ test('lead dto trims route boundary inputs', () => {
   const result = toLeadListQueryDto({
     companyCode: ' STP ',
     phone: ' 999 ',
+    division: ' MSME ',
     search: ' Acme ',
     searchMode: 'phone',
   });
@@ -39,6 +40,7 @@ test('lead dto trims route boundary inputs', () => {
     companyCode: 'STP',
     phone: '999',
     setLabel: undefined,
+    division: 'MSME',
     search: 'Acme',
     searchMode: 'phone',
     status: undefined,
@@ -49,6 +51,17 @@ test('lead dto trims route boundary inputs', () => {
     paginated: undefined,
     includeFacets: undefined,
   });
+});
+
+test('lead dto preserves quick search mode for employee global search', () => {
+  const result = toLeadListQueryDto({
+    companyCode: 'STP',
+    phone: '999',
+    search: 'Acme',
+    searchMode: 'quick',
+  });
+
+  assert.equal(result.searchMode, 'quick');
 });
 
 test('lead mapper normalizes newline remarks', () => {

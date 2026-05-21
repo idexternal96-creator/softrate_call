@@ -8,6 +8,7 @@ const {
   buildAdminCompanyKey,
   buildAdminLeadListKey,
   buildAdminSetKey,
+  buildEmployeeCompanyContactsKey,
   buildEmployeeCompanyKey,
   buildEmployeeLeadListKey,
   buildEmployeeSetKey,
@@ -23,6 +24,7 @@ const {
 const { canUseQueue, queueLeadImportJob } = require('../../../services/leadImportQueue');
 const {
   buildLeadSearchQuery,
+  getLeadDivisions,
   getLeadCompanies,
   getLeadSets,
   parsePagination,
@@ -32,6 +34,8 @@ const { getAiBriefForLead } = require('../../../services/ai/researchWorkflow');
 const { getAiSuggestionForLead } = require('../../../services/ai/suggestionWorkflow');
 
 const router = express.Router();
+const DEFAULT_COMPANY_CONTACT_PAGE_SIZE = 20;
+const MAX_COMPANY_CONTACT_PAGE_SIZE = 200;
 
 function normalizeLeadForResponse(lead) {
   if (!lead) return lead;
@@ -88,10 +92,66 @@ async function getCachedLeadCompanies({ companyCode, phone, query, cacheKey }) {
   delete companiesQuery.company;
   delete companiesQuery.sort;
   delete companiesQuery.includeFacets;
+  delete companiesQuery.includeContacts;
+  delete companiesQuery.contactPageSize;
 
   const { value } = await getOrSet(cacheKey, LEAD_CACHE_TTLS.facets, async () => {
     return getLeadCompanies({ companyCode, phone, query: companiesQuery });
   });
+  return value;
+}
+
+function parseContactPageSize(value) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_COMPANY_CONTACT_PAGE_SIZE;
+  return Math.min(parsed, MAX_COMPANY_CONTACT_PAGE_SIZE);
+}
+
+function shouldIncludeCompanyContacts(query) {
+  return query.includeContacts === true || String(query.includeContacts ?? '').trim().toLowerCase() === 'true';
+}
+
+async function getCachedEmployeeCompanyContacts({ companyCode, phone, query, companyNames, cacheKey }) {
+  const contactPageSize = parseContactPageSize(query.contactPageSize);
+  const contactQuery = { ...query };
+  delete contactQuery.page;
+  delete contactQuery.pageSize;
+  delete contactQuery.paginated;
+  delete contactQuery.includeContacts;
+  delete contactQuery.contactPageSize;
+  delete contactQuery.includeFacets;
+
+  const { value } = await getOrSet(cacheKey, LEAD_CACHE_TTLS.companyContacts, async () => {
+    const requestedCompanies = companyNames
+      .map((companyName) => String(companyName || '').trim())
+      .filter(Boolean);
+    const companyKeys = Array.from(new Set(requestedCompanies.map(normalizeText).filter(Boolean)));
+    const contactsByCompany = Object.fromEntries(requestedCompanies.map((companyName) => [companyName, []]));
+
+    if (!companyKeys.length) return contactsByCompany;
+
+    const { mongoQuery } = buildLeadSearchQuery({
+      companyCode,
+      phone,
+      query: contactQuery,
+    });
+    mongoQuery.leadCompanyNameLower = { $in: companyKeys };
+
+    const rows = await Lead.aggregate([
+      { $match: mongoQuery },
+      { $sort: { leadCompanyNameLower: 1, sheetOrder: 1, createdAt: 1, _id: 1 } },
+      { $group: { _id: '$leadCompanyName', contacts: { $push: '$$ROOT' } } },
+      { $project: { contacts: { $slice: ['$contacts', contactPageSize] } } },
+    ]);
+
+    for (const row of rows) {
+      if (!row?._id) continue;
+      contactsByCompany[row._id] = (row.contacts || []).map(normalizeLeadForResponse);
+    }
+
+    return contactsByCompany;
+  });
+
   return value;
 }
 
@@ -308,6 +368,23 @@ router.get('/employee/sets', async (req, res) => {
   }
 });
 
+// GET — fetch only distinct lead segregation values for an employee
+router.get('/employee/divisions', async (req, res) => {
+  try {
+    const { companyCode, phone } = req.query;
+    if (!companyCode || !phone) {
+      return res.status(400).json({ success: false, message: 'companyCode and phone are required.' });
+    }
+
+    const payload = await getLeadDivisions({ companyCode, phone, query: {} });
+
+    return res.status(200).json({ success: true, divisions: payload.divisions, items: payload.items });
+  } catch (err) {
+    console.error('[get employee divisions]', err);
+    return res.status(500).json({ success: false, message: 'Server error fetching lead segregations.' });
+  }
+});
+
 router.get('/employee/companies', async (req, res) => {
   try {
     const { companyCode, phone } = req.query;
@@ -322,11 +399,25 @@ router.get('/employee/companies', async (req, res) => {
       cacheKey: buildEmployeeCompanyKey(companyCode, phone, req.query),
     });
 
+    const contactsByCompany = shouldIncludeCompanyContacts(req.query)
+      ? await getCachedEmployeeCompanyContacts({
+          companyCode,
+          phone,
+          query: req.query,
+          companyNames: payload.names,
+          cacheKey: buildEmployeeCompanyContactsKey(companyCode, phone, {
+            query: req.query,
+            companyNames: payload.names,
+            contactPageSize: parseContactPageSize(req.query.contactPageSize),
+          }),
+        })
+      : {};
+
     return res.status(200).json({
       success: true,
       companies: payload.companies,
       names: payload.names,
-      contactsByCompany: payload.contactsByCompany || {},
+      contactsByCompany,
       page: payload.page,
       pageSize: payload.pageSize,
       total: payload.total,

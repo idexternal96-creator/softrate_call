@@ -51,6 +51,11 @@ function buildBaseLeadQuery({ companyCode, phone, query = {} }) {
     });
   }
 
+  const division = String(query.division ?? query.mainDivisionDescription ?? '').trim();
+  if (division) {
+    mongoQuery.mainDivisionDescription = new RegExp(`^${escapeRegex(division)}$`, 'i');
+  }
+
   const statuses = String(query.statuses ?? '')
     .split(',')
     .map((status) => status.trim())
@@ -119,6 +124,29 @@ function buildLeadSearchQuery({ companyCode, phone, query = {} }) {
     };
   }
 
+  if (searchMode === 'quick' && normalizedSearch) {
+    const prefixRegex = new RegExp(`^${escapeRegex(normalizedSearch)}`);
+    const quickClauses = [
+      { leadCompanyNameLower: prefixRegex },
+      { contactNameLower: prefixRegex },
+      { directorEmailLower: prefixRegex },
+      { setLabelLower: prefixRegex },
+      { status: search },
+    ];
+
+    if (normalizedPhone.length >= 3) {
+      quickClauses.unshift({ contactNumberNormalized: new RegExp(`^${escapeRegex(normalizedPhone)}`) });
+    }
+
+    mongoQuery.$or = quickClauses;
+    return {
+      mongoQuery,
+      projection,
+      searchStrategy: 'quick_prefix',
+      sort,
+    };
+  }
+
   if (normalizedSearch.length < 3) {
     const prefixRegex = new RegExp(`^${escapeRegex(normalizedSearch)}`);
     const rawPrefixRegex = new RegExp(`^${escapeRegex(search)}`, 'i');
@@ -142,24 +170,14 @@ function buildLeadSearchQuery({ companyCode, phone, query = {} }) {
     };
   }
 
-  const containsRegex = new RegExp(escapeRegex(normalizedSearch));
-  const rawContainsRegex = new RegExp(escapeRegex(search), 'i');
-  mongoQuery.$or = [
-    { leadCompanyNameLower: containsRegex },
-    { leadCompanyName: rawContainsRegex },
-    { contactNameLower: containsRegex },
-    { contactName: rawContainsRegex },
-    { directorEmailLower: containsRegex },
-    { directorEmailAddress: rawContainsRegex },
-    { setLabelLower: containsRegex },
-    { setLabel: rawContainsRegex },
-    { status: rawContainsRegex },
-  ];
+  mongoQuery.$text = { $search: search };
+  projection = { score: { $meta: 'textScore' } };
+  sort = { score: { $meta: 'textScore' }, ...sort };
 
   return {
     mongoQuery,
     projection,
-    searchStrategy: 'contains',
+    searchStrategy: 'text',
     sort,
   };
 }
@@ -174,6 +192,21 @@ function buildLeadSort(sortKey) {
   };
 
   return sortMap[sortKey] || sortMap.sheetOrder_asc;
+}
+
+async function getLeadDivisions({ companyCode, phone, query = {} }) {
+  const mongoQuery = buildBaseLeadQuery({ companyCode, phone, query });
+  const rows = await Lead.aggregate([
+    { $match: mongoQuery },
+    { $match: { mainDivisionDescription: { $nin: ['', null] } } },
+    { $group: { _id: '$mainDivisionDescription', count: { $sum: 1 } } },
+    { $sort: { _id: 1 } },
+  ]);
+
+  return {
+    divisions: rows.map((row) => row._id).filter(Boolean),
+    items: rows.map((row) => ({ label: row._id, count: row.count })),
+  };
 }
 
 async function getLeadSets({ companyCode, phone, query = {} }) {
@@ -197,8 +230,14 @@ async function getLeadCompanies({ companyCode, phone, query = {} }) {
   const pipeline = [
     { $match: mongoQuery },
     { $match: { leadCompanyNameLower: { $ne: '' } } },
-    { $group: { _id: '$leadCompanyName', count: { $sum: 1 } } },
-    { $sort: { count: -1, _id: 1 } },
+    {
+      $group: {
+        _id: '$leadCompanyName',
+        count: { $sum: 1 },
+        minSheetOrder: { $min: '$sheetOrder' },
+      },
+    },
+    { $sort: { minSheetOrder: 1, _id: 1 } },
   ];
 
   const [totalRows, rows] = await Promise.all([
@@ -250,6 +289,7 @@ module.exports = {
   MAX_PAGE_SIZE,
   buildLeadSearchQuery,
   buildLeadSort,
+  getLeadDivisions,
   getLeadCompanies,
   getLeadSets,
   isPaginatedRequest,
