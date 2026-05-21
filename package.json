@@ -7,6 +7,8 @@
     "start:sales": "npm --prefix sales-backend start",
     "dev:crm": "npm --prefix crm-backend run dev",
     "start:crm": "npm --prefix crm-backend start",
+    "dev:finance": "npm --prefix finance-backend run dev",
+    "start:finance": "npm --prefix finance-backend start",
     "dev:tickets": "npm --prefix tickets-backend run dev",
     "start:tickets": "npm --prefix tickets-backend start"
   }
